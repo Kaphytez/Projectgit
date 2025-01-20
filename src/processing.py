@@ -52,6 +52,6 @@ def sort_by_date(data, order):
         return sorted(data, key=date_key, reverse=True)
 
 
-order = input("Введите 'a' для сортировки по возрастанию или 'd' для сортировки по убыванию: ").lower()
+order = input("Введите 'a' для сортировки по возрастанию\n или 'd' для сортировки по убыванию: ").lower()
 
 sorted_data = sort_by_date(data, order)
