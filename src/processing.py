@@ -7,12 +7,12 @@ data = [{'id': 41428829, 'state': 'EXECUTED', 'date': '2019-07-03T18:35:29.51236
 
 
 def filter_by_state(data, state_filter):
-    filtered_data = [item for item in data if item['state'] == state_filter]
+    filtered_data = [stat for stat in data if stat['state'] == state_filter]
     return {'data': filtered_data, 'filter': state_filter}
 
 
 # Получаем ввод пользователя
-user_input = input("Введите 'E' для EXECUTED или 'C' для CANCELED: ").upper()
+user_input = input(str("Введите 'E' для EXECUTED или 'C' для CANCELED: ")).upper()
 
 # Определяем state_filter на основе ввода
 if user_input == 'E':
@@ -26,11 +26,11 @@ else:
 # Фильтруем и выводим результат
 result = filter_by_state(data, state_filter)
 print(f"Отфильтрованные данные для состояния '{result['filter']}':")
-for item in result['data']:
-    print(item)
+for stat in result['data']:
+    print(stat)
 
 
-def sort_by_date(data):
+def sort_by_date(data, order):
     """Сортирует список словарей по дате.
     Args:
         Список словарей, где каждый словарь имеет ключи 'date' (строка в формате ISO 8601)
@@ -38,7 +38,6 @@ def sort_by_date(data):
     Returns:
         Отсортированный список словарей.
     """
-    order = input("Введите 'a' для сортировки по возрастанию или 'd' для сортировки по убыванию: ").lower()
 
     if order not in ('a', 'd'):
         print("Неверный ввод. Пожалуйста, введите 'a' или 'd'.")
@@ -53,6 +52,6 @@ def sort_by_date(data):
         return sorted(data, key=date_key, reverse=True)
 
 
-sorted_data = sort_by_date(data)
-for item in sorted_data:
-    print(item)
+order = input("Введите 'a' для сортировки по возрастанию или 'd' для сортировки по убыванию: ").lower()
+
+sorted_data = sort_by_date(data, order)
