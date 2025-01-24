@@ -8,9 +8,9 @@ if another_action == 'да':
         state_filter = input("Введите значение 'state' для фильтрации ('EXECUTED', 'CANCELED'): ").strip()
         if state_filter:
             filtered_data = filter_by_state(data, state=state_filter)
-            print(filtered_data)  # Добавили вывод filtered_data
+            print(filtered_data)
         else:
-            filtered_data = filter_by_state(data, state="EXECUTED")  # Фильтр по умолчанию "EXECUTED"
+            filtered_data = filter_by_state(data, state="EXECUTED")
             print(filtered_data)
     elif choice == 's':
         order = input("Введите 'a' для сортировки по возрастанию или 'd' для сортировки по убыванию: ").lower()
