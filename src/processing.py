@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import List, Dict, Any
 
 data = [
     {'id': 41428829, 'state': 'EXECUTED', 'date': '2019-07-03T18:35:29.512364'},
@@ -8,7 +9,7 @@ data = [
 ]
 
 
-def filter_by_state(data, state):
+def filter_by_state(data, state: str) -> List[Dict[str, Any]]:
     """
     Фильтрует список словарей по значению 'state'.
 
@@ -22,7 +23,7 @@ def filter_by_state(data, state):
     return [item for item in data if item['state'] == state]
 
 
-def sort_by_date(data, ascending=True):
+def sort_by_date(data, ascending: bool = True) -> list[dict[str, Any]]:
     """
     Сортирует список словарей по дате в поле 'date'.
 
