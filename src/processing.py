@@ -8,54 +8,9 @@ data = [
 ]
 
 
-def filter_by_state(data, state='EXECUTED'):
-    """
-    Фильтрует список словарей по значению ключа 'state'.
-    Args:
-        data (list of dict): Список словарей для фильтрации.
-        state (str, optional): Значение ключа 'state' для фильтрации.
-                                По умолчанию 'EXECUTED'.
-    Returns:
-        list of dict: Список словарей, соответствующих заданному state.
-    """
-    filtered_data = [item for item in data if item.get('state') == state]
-    return filtered_data
+def filter_by_state(data, state):
+    return [item for item in data if item['state'] == state]
 
 
-if __name__ == '__main__':
-
-    user_input = input("Введите 'E' для EXECUTED или 'C' для CANCELED: ").upper()
-
-    if user_input == 'C':
-        canceled_filter = filter_by_state(data, state='CANCELED')
-        print("'CANCELED':", canceled_filter)
-    else:
-        executed_filter = filter_by_state(data, state='EXECUTED')
-        print("'EXECUTED':", executed_filter)
-
-
-def sort_by_date(data, order):
-    """Сортирует список словарей по дате.
-    Args:
-        Список словарей, где каждый словарь имеет ключи 'date' (строка в формате ISO 8601)
-        и другие ключи (в данном случае, 'id' и 'state').
-    Returns:
-        Отсортированный список словарей.
-    """
-
-    if order not in ('a', 'd'):
-        print("Неверный ввод. Пожалуйста, введите 'a' или 'd'.")
-        return data  # Возвращаем исходные данные без сортировки
-
-    def date_key(item):
-        return datetime.fromisoformat(item['date'])
-
-    if order == 'a':
-        return sorted(data, key=date_key)
-    else:  # order == 'd'
-        return sorted(data, key=date_key, reverse=True)
-
-
-order = input("Введите 'a' для сортировки по возрастанию\n или 'd' для сортировки по убыванию: ").lower()
-
-sorted_data = sort_by_date(data, order)
+def sort_by_date(data, ascending=True):
+    return sorted(data, key=lambda x: datetime.fromisoformat(x['date']), reverse=not ascending)
