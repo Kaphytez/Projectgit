@@ -1,4 +1,4 @@
-from src.processing import sort_by_date, filter_by_state, data
+from src.processing import data, filter_by_state, sort_by_date
 
 another_action = input("Хотите ли вы отсортировать 'data' или отфильтровать 'state'? (да/нет): ").lower()
 
