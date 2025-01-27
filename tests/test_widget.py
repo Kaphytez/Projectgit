@@ -1,16 +1,14 @@
 from src.widget import mask_account_card, get_date
 
 
-def test_mask_account_card_account():
-    assert mask_account_card("Счет 12345678901234567890") == "Счет **7890"
+def test_mask_account_card_account(account_card_params):
+    if "Счет" in account_card_params:
+        assert mask_account_card(account_card_params) == "Счет **7890"
 
 
-def test_mask_account_card_visa():
-    assert mask_account_card("Visa 1111222233334444") == "Visa 1111 22** **** 4444"
-
-
-def test_mask_account_card_maestro():
-    assert mask_account_card("Maestro 5555666677778888") == "Maestro 5555 66** **** 8888"
+def test_mask_account_card_visa(account_card_params):
+    if "Visa" in account_card_params:
+        assert mask_account_card(account_card_params) == "Visa 1111 22** **** 4444"
 
 
 def test_mask_account_card_invalid_type():

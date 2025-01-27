@@ -1,7 +1,7 @@
-from src.processing import filter_by_state, sort_by_date, data
+from src.processing import filter_by_state, sort_by_date
 
 
-def test_filter_by_state_executed():
+def test_filter_by_state_executed(sample_processing_data):
     expected = [
         {'id': 41428829, 'state': 'EXECUTED', 'date': '2019-07-03T18:35:29.512364',
          'account': '12345678901234567890',
@@ -9,20 +9,20 @@ def test_filter_by_state_executed():
         {'id': 939719570, 'state': 'EXECUTED', 'date': '2018-06-30T02:08:58.425572',
          'account': '98765432109876543210'}
     ]
-    assert filter_by_state(data, "EXECUTED") == expected
+    assert filter_by_state(sample_processing_data, "EXECUTED") == expected
 
 
-def test_filter_by_state_canceled():
+def test_filter_by_state_canceled(sample_processing_data):
     expected = [
         {'id': 594226727, 'state': 'CANCELED', 'date': '2018-09-12T21:27:25.241689',
          'account': '11223344556677889900'},
         {'id': 615064591, 'state': 'CANCELED', 'date': '2018-10-14T08:21:33.419441',
          'account': '00998877665544332211'}
     ]
-    assert filter_by_state(data, "CANCELED") == expected
+    assert filter_by_state(sample_processing_data, "CANCELED") == expected
 
 
-def test_sort_by_date_asc():
+def test_sort_by_date_asc(sample_processing_data):
     expected = [
         {'id': 939719570, 'state': 'EXECUTED', 'date': '2018-06-30T02:08:58.425572',
          'account': '98765432109876543210'},
@@ -34,10 +34,10 @@ def test_sort_by_date_asc():
          'account': '12345678901234567890', 'card': '111111222233334444'}
 
     ]
-    assert sort_by_date(data, ascending=True) == expected
+    assert sort_by_date(sample_processing_data, ascending=True) == expected
 
 
-def test_sort_by_date_desc():
+def test_sort_by_date_desc(sample_processing_data):
     expected = [
         {'id': 41428829, 'state': 'EXECUTED', 'date': '2019-07-03T18:35:29.512364',
          'account': '12345678901234567890', 'card': '111111222233334444'},
@@ -49,4 +49,4 @@ def test_sort_by_date_desc():
          'account': '98765432109876543210'}
 
     ]
-    assert sort_by_date(data, ascending=False) == expected
+    assert sort_by_date(sample_processing_data, ascending=False) == expected
