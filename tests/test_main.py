@@ -5,8 +5,9 @@ from main import main_function
 
 def test_main_function_filter_executed():
     expected = [
-        {'id': 41428829, 'state': 'EXECUTED', 'date': '2019-07-03T18:35:29.512364'},
-        {'id': 939719570, 'state': 'EXECUTED', 'date': '2018-06-30T02:08:58.425572'}
+        {'date': '03.07.2019', 'id': 41428829, 'state': 'EXECUTED', 'account': 'Счет **7890',
+         'card': 'Visa 1111 11** **** 4444'},
+        {'date': '30.06.2018', 'id': 939719570, 'state': 'EXECUTED', 'account': 'Счет **3210', 'card': None}
     ]
 
     assert main_function(another_action="да", choice="f", state_filter="EXECUTED") == expected
@@ -14,26 +15,28 @@ def test_main_function_filter_executed():
 
 def test_main_function_filter_canceled():
     expected = [
-        {'id': 594226727, 'state': 'CANCELED', 'date': '2018-09-12T21:27:25.241689'},
-        {'id': 615064591, 'state': 'CANCELED', 'date': '2018-10-14T08:21:33.419441'}
+        {'date': '12.09.2018', 'id': 594226727, 'state': 'CANCELED', 'account': 'Счет **9900', 'card': None},
+        {'date': '14.10.2018', 'id': 615064591, 'state': 'CANCELED', 'account': 'Счет **2211', 'card': None}
     ]
     assert main_function(another_action="да", choice="f", state_filter="CANCELED") == expected
 
 
 def test_main_function_filter_default():
     expected = [
-        {'id': 41428829, 'state': 'EXECUTED', 'date': '2019-07-03T18:35:29.512364'},
-        {'id': 939719570, 'state': 'EXECUTED', 'date': '2018-06-30T02:08:58.425572'}
+        {'date': '03.07.2019', 'id': 41428829, 'state': 'EXECUTED', 'account': 'Счет **7890',
+         'card': 'Visa 1111 11** **** 4444'},
+        {'date': '30.06.2018', 'id': 939719570, 'state': 'EXECUTED', 'account': 'Счет **3210', 'card': None}
     ]
     assert main_function(another_action="да", choice="f", state_filter=None) == expected
 
 
 def test_main_function_sort_asc():
     expected = [
-        {'id': 939719570, 'state': 'EXECUTED', 'date': '2018-06-30T02:08:58.425572'},
-        {'id': 594226727, 'state': 'CANCELED', 'date': '2018-09-12T21:27:25.241689'},
-        {'id': 615064591, 'state': 'CANCELED', 'date': '2018-10-14T08:21:33.419441'},
-        {'id': 41428829, 'state': 'EXECUTED', 'date': '2019-07-03T18:35:29.512364'}
+        {'date': '30.06.2018', 'id': 939719570, 'state': 'EXECUTED', 'account': 'Счет **3210', 'card': None},
+        {'date': '12.09.2018', 'id': 594226727, 'state': 'CANCELED', 'account': 'Счет **9900', 'card': None},
+        {'date': '14.10.2018', 'id': 615064591, 'state': 'CANCELED', 'account': 'Счет **2211', 'card': None},
+        {'date': '03.07.2019', 'id': 41428829, 'state': 'EXECUTED', 'account': 'Счет **7890',
+         'card': 'Visa 1111 11** **** 4444'}
     ]
 
     assert main_function(another_action="да", choice="s", order="a") == expected
@@ -41,20 +44,22 @@ def test_main_function_sort_asc():
 
 def test_main_function_sort_desc():
     expected = [
-        {'id': 41428829, 'state': 'EXECUTED', 'date': '2019-07-03T18:35:29.512364'},
-        {'id': 615064591, 'state': 'CANCELED', 'date': '2018-10-14T08:21:33.419441'},
-        {'id': 594226727, 'state': 'CANCELED', 'date': '2018-09-12T21:27:25.241689'},
-        {'id': 939719570, 'state': 'EXECUTED', 'date': '2018-06-30T02:08:58.425572'}
+        {'date': '03.07.2019', 'id': 41428829, 'state': 'EXECUTED', 'account': 'Счет **7890',
+         'card': 'Visa 1111 11** **** 4444'},
+        {'date': '14.10.2018', 'id': 615064591, 'state': 'CANCELED', 'account': 'Счет **2211', 'card': None},
+        {'date': '12.09.2018', 'id': 594226727, 'state': 'CANCELED', 'account': 'Счет **9900', 'card': None},
+        {'date': '30.06.2018', 'id': 939719570, 'state': 'EXECUTED', 'account': 'Счет **3210', 'card': None}
     ]
     assert main_function(another_action="да", choice="s", order="d") == expected
 
 
 def test_main_function_sort_default():
     expected = [
-        {'id': 939719570, 'state': 'EXECUTED', 'date': '2018-06-30T02:08:58.425572'},
-        {'id': 594226727, 'state': 'CANCELED', 'date': '2018-09-12T21:27:25.241689'},
-        {'id': 615064591, 'state': 'CANCELED', 'date': '2018-10-14T08:21:33.419441'},
-        {'id': 41428829, 'state': 'EXECUTED', 'date': '2019-07-03T18:35:29.512364'}
+        {'date': '30.06.2018', 'id': 939719570, 'state': 'EXECUTED', 'account': 'Счет **3210', 'card': None},
+        {'date': '12.09.2018', 'id': 594226727, 'state': 'CANCELED', 'account': 'Счет **9900', 'card': None},
+        {'date': '14.10.2018', 'id': 615064591, 'state': 'CANCELED', 'account': 'Счет **2211', 'card': None},
+        {'date': '03.07.2019', 'id': 41428829, 'state': 'EXECUTED', 'account': 'Счет **7890',
+         'card': 'Visa 1111 11** **** 4444'}
     ]
     assert main_function(another_action="да", choice="s", order=None) == expected
 
