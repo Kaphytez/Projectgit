@@ -1,5 +1,6 @@
-import pytest
 from unittest.mock import patch
+
+import pytest
 
 
 @pytest.fixture
@@ -51,8 +52,7 @@ def expected_sort_desc_data():
 def sample_processing_data():
     return [
         {'id': 41428829, 'state': 'EXECUTED', 'date': '2019-07-03T18:35:29.512364',
-         'account': '12345678901234567890',
-         'card': '111111222233334444'},
+         'account': '12345678901234567890', 'card': '111111222233334444'},
         {'id': 939719570, 'state': 'EXECUTED', 'date': '2018-06-30T02:08:58.425572',
          'account': '98765432109876543210'},
         {'id': 594226727, 'state': 'CANCELED', 'date': '2018-09-12T21:27:25.241689',
@@ -64,4 +64,19 @@ def sample_processing_data():
 
 @pytest.fixture(params=["Счет 12345678901234567890", "Visa 1111222233334444"])
 def account_card_params(request):
+    return request.param
+
+
+@pytest.fixture(params=["12345678901234567890", "1234567890"])
+def mask_account_params(request):
+    return request.param
+
+
+@pytest.fixture(params=["1111222233334444", "12345678", ""])
+def mask_card_params(request):
+    return request.param
+
+
+@pytest.fixture(params=["EXECUTED", "CANCELED"])
+def state_params(request):
     return request.param
