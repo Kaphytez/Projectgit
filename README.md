@@ -6,7 +6,7 @@
 
 ## Установка:
 ```
-- git clone https://github.com/Kaphytez/Projectgit
+git clone https://github.com/Kaphytez/Projectgit
 ```
 ## Использование:
 
