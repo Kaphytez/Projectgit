@@ -137,3 +137,6 @@ class TestMainFunction(unittest.TestCase):
 
     def test_main_function_no_action(self):
         self.assertIsNone(main_function(another_action="нет"))
+
+    def test_main_function_no_choice(self):
+        self.assertEqual(main_function(another_action="да"), "Программа завершена.")
