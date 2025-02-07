@@ -1,6 +1,7 @@
 import unittest
+from typing import Any, Dict, List
+
 from main import main_function  # Correct import
-from typing import List, Dict, Any
 
 
 class TestMainFunction(unittest.TestCase):

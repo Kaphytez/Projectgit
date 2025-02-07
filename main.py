@@ -1,7 +1,8 @@
-from src.processing import data, filter_by_state
-from src.widget import get_date, mask_account_card
-from src import generators
 from datetime import datetime
+
+from src import generators
+from src.processing import filter_by_state
+from src.widget import get_date, mask_account_card
 
 
 def format_transaction(item):
@@ -97,7 +98,8 @@ if __name__ == "__main__":
         while True:
             choice = input(
                 "Выберите действие: 'f' для фильтрации по 'state', 's' для сортировки по 'date',"
-                " 'c' для фильтрации по 'currency', 'd' для получения описаний транзакций, 'k' для генерации номеров карт: ").lower()
+                " 'c' для фильтрации по 'currency', 'd' для получения описаний транзакций,"
+                " 'k' для генерации номеров карт: ").lower()
             if choice in ('f', 's', 'c', 'd', 'k'):
                 break
             print("Неверный ввод. Попробуйте еще раз.")

@@ -1,5 +1,5 @@
-from typing import List, Dict, Generator, Any
 import random
+from typing import Any, Dict, Generator, List
 
 
 def transaction_descriptions(transactions: List[Dict[str, Any]]) -> Generator[str, None, None]:

@@ -1,6 +1,7 @@
 import unittest
+from typing import Any, Dict, List
+
 from src import generators
-from typing import List, Dict, Any
 
 
 class TestFilterByCurrency(unittest.TestCase):
@@ -73,7 +74,8 @@ class TestTransactionDescriptions(unittest.TestCase):
             {'description': 'Снятие наличных'}
         ]
         descriptions = list(generators.transaction_descriptions(transactions))
-        self.assertEqual(descriptions, ['Перевод организации', 'No description', 'Пополнение карты', 'Снятие наличных'])
+        self.assertEqual(descriptions, ['Перевод организации', 'No description',
+                                        'Пополнение карты', 'Снятие наличных'])
 
 
 class TestCardNumberGenerator(unittest.TestCase):
