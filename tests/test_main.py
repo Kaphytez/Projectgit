@@ -1,5 +1,6 @@
 import unittest
 from typing import Any, Dict, List
+from unittest.mock import patch
 
 from main import main_function  # Correct import
 
@@ -129,12 +130,24 @@ class TestMainFunction(unittest.TestCase):
                          self.expected_transaction_descriptions_data)
 
     def test_main_function_card_number_generator(self):
-        result = main_function(another_action="да", choice="k")
-        self.assertIsInstance(result, list)
-        self.assertEqual(len(result), 5)  # Assuming default number of cards is 5
-        for card_number in result:
-            self.assertIsInstance(card_number, str)
-            self.assertEqual(len(card_number), 19)
+        expected_result = [
+            "1000000000000000",
+            "1000000000000001",
+            "1000000000000002",
+            "1000000000000003",
+            "1000000000000004",
+            "1000000000000005",
+            "1000000000000006",
+            "1000000000000007",
+            "1000000000000008",
+            "1000000000000009",
+            "1000000000000010",
+        ]
+
+        with patch('builtins.input', side_effect=["1000000000000000", "1000000000000010"]):
+            result = main_function("да", choice="k")
+
+        self.assertEqual(result, expected_result)
 
     def test_main_function_no_action(self):
         self.assertIsNone(main_function(another_action="нет"))

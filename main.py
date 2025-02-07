@@ -5,19 +5,8 @@ from src.processing import filter_by_state
 from src.widget import get_date, mask_account_card
 
 
-def format_transaction(item):
-    """Вспомогательная функция для форматирования транзакции"""
-    return {
-        'date': get_date(item['date']),
-        'id': item['id'],
-        'state': item['state'],
-        'account': mask_account_card(item.get('from', '')),
-        'card': mask_account_card(item.get('card', '')),
-    }
-
-
 def main_function(another_action, choice=None, state_filter=None, order=None, currency_filter=None,
-                  description_count=None):
+                  description_count=None, start=None, stop=None):
     if another_action != 'да':
         return None
 
@@ -54,7 +43,20 @@ def main_function(another_action, choice=None, state_filter=None, order=None, cu
         }
     ]
 
+    def format_transaction(item):
+        """Вспомогательная функция для форматирования транзакции"""
+        return {
+            'date': get_date(item['date']),
+            'id': item['id'],
+            'state': item['state'],
+            'account': mask_account_card(item.get('from', '')),
+            'card': mask_account_card(item.get('card', '')),
+        }
+
     all_transactions = transactions
+
+    # Убедимся, что choice не None
+    choice = choice or ""
 
     if choice == 'f':
         filtered_transactions = list(filter_by_state(all_transactions, state=state_filter or "EXECUTED"))
@@ -82,78 +84,50 @@ def main_function(another_action, choice=None, state_filter=None, order=None, cu
             except StopIteration:
                 break  # Если транзакций меньше, чем запрошено
         return result
-    elif choice == 'k':  # Новая опция для генератора карт
-        card_numbers = generators.card_number_generator()  # Создаем генератор
-        result = list(card_numbers)  # Преобразуем генератор в список
-        return result
+    elif choice.lower() == "k":
+        start_str = input("Введите начальный номер карты: ")
+        stop_str = input("Введите конечный номер карты: ")
+        try:
+            start = int(start_str)
+            stop = int(stop_str)
+        except ValueError:
+            print("Ошибка: 'start' и 'stop' должны быть целыми числами.")
+            return None
+        else:
+            if start > stop:
+                print("Ошибка: Начальный номер должен быть меньше или равен конечному.")
+                return None
+            else:
+                result = list(generators.card_number_generator(start, stop))
+                return result
     else:
         return "Программа завершена."
 
 
 if __name__ == "__main__":
-    another_action = input(
-        "Хотите ли вы выполнить операции с транзакциями или сгенерировать номера карт? (да/нет): ").lower()
+    another_action = input("Вы хотите выполнить операцию? (да/нет): ")
+    if another_action.lower() == "да":
+        choice = input(
+            "Выберите действие: (f - фильтрация по статусу, s - сортировка по дате, c - фильтрация по валюте,"
+            " d - генерация описаний, k - генерация карт): ")
 
-    if another_action == 'да':
-        while True:
-            choice = input(
-                "Выберите действие: 'f' для фильтрации по 'state', 's' для сортировки по 'date',"
-                " 'c' для фильтрации по 'currency', 'd' для получения описаний транзакций,"
-                " 'k' для генерации номеров карт: ").lower()
-            if choice in ('f', 's', 'c', 'd', 'k'):
-                break
-            print("Неверный ввод. Попробуйте еще раз.")
+        if choice.lower() == "f":
+            state_filter = input("Введите статус для фильтрации (EXECUTED, CANCELED): ")
+            result = main_function(another_action, choice=choice.lower(), state_filter=state_filter.upper())
+        elif choice.lower() == "s":
+            order = input("Выберите порядок сортировки (a - по возрастанию, d - по убыванию): ")
+            result = main_function(another_action, choice=choice.lower(), order=order.lower())
+        elif choice.lower() == "c":
+            currency_filter = input("Введите код валюты для фильтрации (например, USD, RUB): ")
+            result = main_function(another_action, choice=choice.lower(), currency_filter=currency_filter.upper())
+        elif choice.lower() == "d":
+            description_count = input("Введите количество описаний для генерации: ")
+            result = main_function(another_action, choice=choice.lower(), description_count=description_count)
+        elif choice.lower() == "k":
+            result = main_function(another_action, choice=choice.lower())
+        else:
+            result = main_function(another_action)
 
-        if choice == 'f':
-            while True:
-                state_filter = input(
-                    "Введите значение 'state' для фильтрации ('EXECUTED', 'CANCELED'): ").strip().upper()
-                if state_filter in ('EXECUTED', 'CANCELED', ''):
-                    break
-                print("Неверный ввод. Попробуйте еще раз.")
-            result = main_function(another_action, choice, state_filter)
-
-            if isinstance(result, list):
-                for transaction in result:
-                    print(transaction)
-            else:
-                print(result)
-        elif choice == 's':
-            while True:
-                order = input("Введите 'a' для сортировки по возрастанию или 'd' для сортировки по убыванию: ").lower()
-                if order in ('a', 'd'):
-                    break
-                print("Неверный ввод. Попробуйте еще раз.")
-            result = main_function(another_action, choice, None, order)
-            if isinstance(result, list):
-                for transaction in result:
-                    print(transaction)
-            else:
-                print(result)
-        elif choice == 'c':
-            currency_filter = input("Введите код валюты для фильтрации (например, USD, EUR, RUB): ").upper()
-            result = main_function(another_action, choice, None, None, currency_filter)
-
-            if isinstance(result, list):
-                for transaction in result:
-                    print(transaction)
-            else:
-                print(result)
-        elif choice == 'd':
-            description_count = input("Введите количество описаний транзакций для вывода (целое число): ")
-            result = main_function(another_action, choice, None, None, None, description_count)
-
-            if isinstance(result, list):
-                for description in result:
-                    print(description)
-            else:
-                print(result)
-        elif choice == 'k':
-            result = main_function(another_action, choice)  # Вызываем без параметров
-            if isinstance(result, list):
-                for card_number in result:
-                    print(card_number)
-            else:
-                print(result)
+        print(result)
     else:
         print("Программа завершена.")

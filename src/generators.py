@@ -1,4 +1,3 @@
-import random
 from typing import Any, Dict, Generator, List
 
 
@@ -16,43 +15,40 @@ def transaction_descriptions(transactions: List[Dict[str, Any]]) -> Generator[st
         yield transaction.get('description', 'No description')
 
 
-def card_number_generator(num_cards: int = 5) -> Generator[str, None, None]:
+def card_number_generator(start: int, stop: int):
     """
-    Генератор, который выдает случайные уникальные номера банковских карт в формате XXXX XXXX XXXX XXXX.
+    Генератор 16-значных номеров карт в заданном диапазоне.
 
     Args:
-        num_cards (int): Количество случайных номеров карт для генерации. Defaults to 5.
+        start: Начальный номер карты (включительно).
+        stop: Конечный номер карты (включительно).
 
     Yields:
-        str: Случайный уникальный номер банковской карты в формате XXXX XXXX XXXX XXXX.
+        Строка, представляющая 16-значный номер карты.
     """
-    generated_cards = set()  # Множество для хранения сгенерированных номеров
-    while len(generated_cards) < num_cards:
-        temp_card_number = ''.join(random.choice('0123456789') for _ in range(16))
-        formatted_card_number = ' '.join([temp_card_number[j:j + 4] for j in range(0, 16, 4)])
-        generated_cards.add(formatted_card_number)
-    for card in generated_cards:
-        yield card
+    for i in range(start, stop + 1):
+        yield str(i).zfill(16)
 
 
-def filter_by_currency(transactions: List[Dict[str, Any]], currency: str) -> Generator[Dict[str, Any], None, None]:
+def filter_by_currency(transactions: list[dict], currency: str):
     """
-    Генератор, который фильтрует транзакции по заданной валюте.
+    Фильтрует список транзакций по указанной валюте.
+    Безопасно обрабатывает транзакции без информации о валюте.
 
     Args:
-        transactions (List[Dict[str, Any]]): Список транзакций.
-        currency (str): Код валюты для фильтрации (например, "USD", "EUR").
+        transactions: Список словарей, представляющих транзакции.
+        currency: Код валюты для фильтрации (например, "USD", "RUB").
 
     Yields:
-        Dict[str, Any]: Транзакция, соответствующая заданной валюте.
+        Словари транзакций, соответствующие указанной валюте.
     """
-    if not transactions:
-        return  # Возвращаем пустой генератор, если список транзакций пуст
-
     for transaction in transactions:
         try:
-            if transaction['operationAmount']['currency']['code'] == currency:
+            if transaction.get('operationAmount', {}).get('currency', {}).get('code') == currency:
                 yield transaction
-        except (KeyError, TypeError):
-            # Пропускаем транзакции без информации о валюте
+        except AttributeError:
+            # Handle cases where transaction['operationAmount']['currency'] is not a dictionary
+            pass
+        except TypeError:
+            # Handle cases where transaction['operationAmount'] or transaction['currency'] is None
             pass
