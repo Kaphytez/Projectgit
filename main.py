@@ -1,6 +1,7 @@
 from src.processing import data, filter_by_state
 from src.widget import get_date, mask_account_card
 from src import generators
+from datetime import datetime
 
 
 def format_transaction(item):
@@ -59,7 +60,8 @@ def main_function(another_action, choice=None, state_filter=None, order=None, cu
         formatted_transactions = list(map(format_transaction, filtered_transactions))
         return formatted_transactions
     elif choice == 's':
-        sorted_transactions = sorted(all_transactions, key=lambda x: get_date(x['date']),
+        sorted_transactions = sorted(all_transactions,
+                                     key=lambda x: datetime.strptime(x['date'], '%Y-%m-%dT%H:%M:%S.%f'),
                                      reverse=(order == 'd'))
         formatted_transactions = list(map(format_transaction, sorted_transactions))
         return formatted_transactions
