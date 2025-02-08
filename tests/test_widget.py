@@ -1,14 +1,12 @@
 from src.widget import get_date, mask_account_card
 
 
-def test_mask_account_card_account(account_card_params):
-    if "Счет" in account_card_params:
-        assert mask_account_card(account_card_params) == "Счет **7890"
+def test_mask_account_card_account():
+    assert mask_account_card("Счет 12345678901234567890") == "Счет **7890"
 
 
-def test_mask_account_card_visa(account_card_params):
-    if "Visa" in account_card_params:
-        assert mask_account_card(account_card_params) == "Visa 1111 22** **** 4444"
+def test_mask_account_card_visa():
+    assert mask_account_card("Visa 1111222233334444") == "Visa 1111 22** **** 4444"
 
 
 def test_mask_account_card_invalid_type():
@@ -16,7 +14,7 @@ def test_mask_account_card_invalid_type():
 
 
 def test_mask_account_card_invalid_format():
-    assert mask_account_card("Счет_1234567890") == "Invalid format: Input must have 'Type Number' format"
+    assert mask_account_card("Счет_1234567890") == "Счет_1234567890"
 
 
 def test_mask_account_card_not_string():
@@ -28,8 +26,7 @@ def test_get_date_valid():
 
 
 def test_get_date_invalid_format():
-    assert get_date("2023-10-26 10:30:00") == ("Invalid date format:"
-                                               " Date must be in 'YYYY-MM-DDTHH:MM:SS.ffffff' format")
+    assert get_date("2023-10-26 10:30:00") == "Invalid date format"
 
 
 def test_get_date_invalid_input():

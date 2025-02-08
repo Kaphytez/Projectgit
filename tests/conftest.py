@@ -80,3 +80,26 @@ def mask_card_params(request):
 @pytest.fixture(params=["EXECUTED", "CANCELED"])
 def state_params(request):
     return request.param
+
+
+@pytest.fixture
+def mock_input_card_numbers():
+    with patch('builtins.input', side_effect=["1000000000000000", "1000000000000010"]) as mock:
+        yield mock
+
+
+@pytest.fixture
+def expected_card_numbers_data():
+    return [
+        "1000000000000000",
+        "1000000000000001",
+        "1000000000000002",
+        "1000000000000003",
+        "1000000000000004",
+        "1000000000000005",
+        "1000000000000006",
+        "1000000000000007",
+        "1000000000000008",
+        "1000000000000009",
+        "1000000000000010",
+    ]
