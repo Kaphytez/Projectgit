@@ -1,5 +1,9 @@
 import os
+import sys
+
 from src.decorators import log
+
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 
 def test_log_success(capsys):
@@ -47,12 +51,10 @@ def test_log_error(capsys):
     assert "Inputs: (10, 0)" in captured.out
 
 
-def test_log_to_file(tmpdir):
+def test_log_to_file(log_file):
     """
     Тестирует логирование в файл.
     """
-    # Создаём временный файл для логов
-    log_file = tmpdir.join("test_log.txt")
 
     @log(filename=log_file)
     def multiply(a, b):
@@ -72,12 +74,10 @@ def test_log_to_file(tmpdir):
     assert "multiply ok" in log_content
 
 
-def test_log_error_to_file(tmpdir):
+def test_log_error_to_file(log_file):
     """
     Тестирует логирование ошибки в файл.
     """
-    # Создаём временный файл для логов
-    log_file = tmpdir.join("test_log.txt")
 
     @log(filename=log_file)
     def divide(a, b):
