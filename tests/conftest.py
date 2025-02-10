@@ -1,3 +1,4 @@
+import os
 from unittest.mock import patch
 
 import pytest
@@ -103,3 +104,24 @@ def expected_card_numbers_data():
         "1000000000000009",
         "1000000000000010",
     ]
+
+
+@pytest.fixture
+def log_file(tmpdir):
+    """
+    Фикстура для создания временного файла логов.
+    """
+    log_file = tmpdir.join("test_log.txt")
+    yield log_file
+    # Очистка файла после завершения теста (опционально)
+    if os.path.exists(log_file):
+        os.remove(log_file)
+
+
+@pytest.fixture
+def capsys_with_log(capsys):
+    """
+    Фикстура для перехвата вывода в консоль с дополнительной логикой.
+    """
+    # Можно добавить дополнительную логику, если нужно
+    yield capsys
