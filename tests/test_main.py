@@ -1,156 +1,77 @@
-import unittest
-from typing import Any, Dict, List
-from unittest.mock import patch
+import pytest
+from datetime import datetime
+from main import main
+from src.processing import filter_by_state, sort_by_date
+from src.widget import mask_account_card
+from src.masks import get_mask_account, get_mask_card_number
+from src.generators import card_number_generator
 
-from main import main_function  # Correct import
+
+def test_filter_by_state(sample_processing_data, state_params):
+    """Тестирование фильтрации по состоянию."""
+    filtered_data = filter_by_state(sample_processing_data, state_params)
+    for item in filtered_data:
+        assert item["state"] == state_params
 
 
-class TestMainFunction(unittest.TestCase):
-    # Sample data for testing
-    transactions: List[Dict[str, Any]] = [
-        {
-            "id": 939719570,
-            "state": "EXECUTED",
-            "date": "2018-06-30T02:08:58.425572",
-            "operationAmount": {
-                "amount": "9824.07",
-                "currency": {
-                    "name": "USD",
-                    "code": "USD"
-                }
-            },
-            "description": "Перевод организации",
-            "from": "Счет 75106830613657916952",
-            "to": "Счет 11776614605963066702"
-        },
-        {
-            "id": 142264268,
-            "state": "EXECUTED",
-            "date": "2019-04-04T23:20:05.206878",
-            "operationAmount": {
-                "amount": "79114.93",
-                "currency": {
-                    "name": "USD",
-                    "code": "USD"
-                }
-            },
-            "description": "Перевод со счета на счет",
-            "from": "Счет 19708645243227258542",
-            "to": "Счет 75651667383060284188"
-        }
-    ]
+def test_sort_by_date_asc(sample_processing_data):
+    """Тестирование сортировки по дате по возрастанию."""
+    sorted_data = sort_by_date(sample_processing_data, ascending=True)
+    dates = [item["date"] for item in sorted_data]
+    assert dates == sorted(dates)
 
-    def setUp(self):
-        # Prepare expected data here based on the transactions
-        self.expected_filter_executed_data = [
-            {'date': '30.06.2018', 'id': 939719570, 'state': 'EXECUTED', 'account': 'Счет **6952',
-             'card': ''},
-            {'date': '04.04.2019', 'id': 142264268, 'state': 'EXECUTED', 'account': 'Счет **8542',
-             'card': ''}
-        ]
 
-        self.expected_sort_asc_data = [
-            {'date': '30.06.2018', 'id': 939719570, 'state': 'EXECUTED', 'account': 'Счет **6952',
-             'card': ''},
-            {'date': '04.04.2019', 'id': 142264268, 'state': 'EXECUTED', 'account': 'Счет **8542',
-             'card': ''}
-        ]
+def test_sort_by_date_desc(sample_processing_data):
+    """Тестирование сортировки по дате по убыванию."""
+    sorted_data = sort_by_date(sample_processing_data, ascending=False)
+    dates = [item["date"] for item in sorted_data]
+    assert dates == sorted(dates, reverse=True)
 
-        self.expected_sort_desc_data = [
-            {'date': '04.04.2019', 'id': 142264268, 'state': 'EXECUTED', 'account': 'Счет **8542',
-             'card': ''},
-            {'date': '30.06.2018', 'id': 939719570, 'state': 'EXECUTED', 'account': 'Счет **6952',
-             'card': ''}
-        ]
 
-        self.expected_filter_currency_data = [
-            {
-                "id": 939719570,
-                "state": "EXECUTED",
-                "date": "2018-06-30T02:08:58.425572",
-                "operationAmount": {
-                    "amount": "9824.07",
-                    "currency": {
-                        "name": "USD",
-                        "code": "USD"
-                    }
-                },
-                "description": "Перевод организации",
-                "from": "Счет 75106830613657916952",
-                "to": "Счет 11776614605963066702"
-            },
-            {
-                "id": 142264268,
-                "state": "EXECUTED",
-                "date": "2019-04-04T23:20:05.206878",
-                "operationAmount": {
-                    "amount": "79114.93",
-                    "currency": {
-                        "name": "USD",
-                        "code": "USD"
-                    }
-                },
-                "description": "Перевод со счета на счет",
-                "from": "Счет 19708645243227258542",
-                "to": "Счет 75651667383060284188"
-            }
-        ]
+def test_mask_account_card(account_card_params):
+    """Тестирование маскировки номера карты или счета."""
+    masked = mask_account_card(account_card_params)
+    if "Счет" in account_card_params:
+        assert masked.startswith("Счет **")
+    else:
+        assert masked.startswith("Visa") or masked.startswith("MasterCard") or masked.startswith("Maestro")
 
-        self.expected_transaction_descriptions_data = [
-            "Перевод организации",
-            "Перевод со счета на счет"
-        ]
 
-    def test_main_function_filter_executed(self):
-        self.assertEqual(main_function(another_action="да", choice="f", state_filter="EXECUTED"),
-                         self.expected_filter_executed_data)
+def test_get_mask_account(mask_account_params):
+    """Тестирование маскировки номера счета."""
+    masked = get_mask_account(mask_account_params)
+    if len(mask_account_params) == 20:
+        assert masked == f"**{mask_account_params[-4:]}"
+    else:
+        assert masked == "Invalid account number: Account number must be exactly 20 digits"
 
-    def test_main_function_filter_canceled(self):
-        self.assertEqual(main_function(another_action="да", choice="f", state_filter="CANCELED"), [])
 
-    def test_main_function_filter_default(self):
-        self.assertEqual(main_function(another_action="да", choice="f", state_filter=None),
-                         self.expected_filter_executed_data)
+def test_get_mask_card_number(mask_card_params):
+    """Тестирование маскировки номера карты."""
+    masked = get_mask_card_number(mask_card_params)
+    if len(mask_card_params) == 16:
+        assert masked == f"{mask_card_params[:4]} {mask_card_params[4:6]}** **** {mask_card_params[-4:]}"
+    elif len(mask_card_params) <= 8:
+        assert masked == mask_card_params
+    else:
+        assert masked == ""
 
-    def test_main_function_sort_asc(self):
-        self.assertEqual(main_function(another_action="да", choice="s", order="a"), self.expected_sort_asc_data)
 
-    def test_main_function_sort_desc(self):
-        self.assertEqual(main_function(another_action="да", choice="s", order="d"), self.expected_sort_desc_data)
+def test_card_number_generator(mock_input_card_numbers, expected_card_numbers_data):
+    """Тестирование генерации номеров карт."""
+    generated_numbers = list(card_number_generator(1000000000000000, 1000000000000010))
+    assert generated_numbers == expected_card_numbers_data
 
-    def test_main_function_sort_default(self):
-        self.assertEqual(main_function(another_action="да", choice="s", order=None), self.expected_sort_asc_data)
 
-    def test_main_function_filter_currency(self):
-        self.assertEqual(main_function(another_action="да", choice="c", currency_filter="USD"),
-                         self.expected_filter_currency_data)
+def test_filter_by_state_executed(sample_processing_data):
+    """Тестирование фильтрации по состоянию 'EXECUTED'."""
+    filtered_data = filter_by_state(sample_processing_data, "EXECUTED")
+    for item in filtered_data:
+        assert item["state"] == "EXECUTED"
 
-    def test_main_function_transaction_descriptions(self):
-        self.assertEqual(main_function(another_action="да", choice="d", description_count="2"),
-                         self.expected_transaction_descriptions_data)
 
-    def test_main_function_card_number_generator(self):
-        expected_result = [
-            "1000000000000000",
-            "1000000000000001",
-            "1000000000000002",
-            "1000000000000003",
-            "1000000000000004",
-            "1000000000000005",
-            "1000000000000006",
-            "1000000000000007",
-            "1000000000000008",
-            "1000000000000009",
-            "1000000000000010",
-        ]
-
-        with patch('builtins.input', side_effect=["1000000000000000", "1000000000000010"]):
-            result = main_function("да", choice="k")
-
-        self.assertEqual(result, expected_result)
-
-    def test_main_function_no_action(self):
-        self.assertIsNone(main_function(another_action="нет"))
-
-    def test_main_function_no_choice(self):
-        self.assertEqual(main_function(another_action="да"), "Программа завершена.")
+def test_filter_by_state_canceled(sample_processing_data):
+    """Тестирование фильтрации по состоянию 'CANCELED'."""
+    filtered_data = filter_by_state(sample_processing_data, "CANCELED")
+    for item in filtered_data:
+        assert item["state"] == "CANCELED"

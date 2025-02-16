@@ -13,10 +13,10 @@ def filter_by_state(data, state: str) -> List[Dict[str, Any]]:
     Returns:
         list: Новый список словарей, которые соответствуют заданному 'state'.
     """
-    return [item for item in data if item['state'] == state]
+    return [item for item in data if item.get("state") == state]
 
 
-def sort_by_date(data, ascending: bool = True) -> list[dict[str, Any]]:
+def sort_by_date(data, ascending: bool = True) -> list:
     """
     Сортирует список словарей по дате в поле 'date'.
 
@@ -27,4 +27,9 @@ def sort_by_date(data, ascending: bool = True) -> list[dict[str, Any]]:
     Returns:
         list: Новый список словарей, отсортированных по дате.
     """
-    return sorted(data, key=lambda x: datetime.fromisoformat(x['date']), reverse=not ascending)
+    return sorted(
+        data,
+        key=lambda x: x["date"],
+        reverse=not ascending
+    )
+

@@ -5,7 +5,8 @@ import pytest
 
 @pytest.fixture
 def mock_input():
-    with patch('builtins.input', side_effect=["да", "f", "EXECUTED"]) as mock:
+    # Выбираем опцию 1 (вывод последних 5 транзакций) и выход (5)
+    with patch('builtins.input', side_effect=["1", "5"]) as mock:
         yield mock
 
 

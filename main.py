@@ -13,8 +13,11 @@ def display_transactions(transactions):
         if not transaction or "date" not in transaction:
             continue  # Пропускаем пустые или некорректные записи
 
+        # Получаем ID, дату и статус транзакции
+        transaction_id = transaction.get("id", "N/A")
         date = get_date(transaction.get("date", ""))
         description = transaction.get("description", "No description")
+        state = transaction.get("state", "N/A")
 
         # Маскируем номера карт и счетов
         from_account = mask_account_card(transaction.get("from", ""))
@@ -23,12 +26,14 @@ def display_transactions(transactions):
         amount = transaction.get("operationAmount", {}).get("amount", "N/A")
         currency = transaction.get("operationAmount", {}).get("currency", {}).get("code", "N/A")
 
-        print(f"{date} {description}")
+        # Выводим информацию о транзакции
+        print(f"ID: {transaction_id}, Дата: {date}, Статус: {state}")
+        print(f"Описание: {description}")
         if from_account:
             print(f"{from_account} -> {to_account}")
         else:
             print(f"Счет открыт -> {to_account}")
-        print(f"{amount} {currency}")
+        print(f"Сумма: {amount} {currency}")
         print()
 
 
