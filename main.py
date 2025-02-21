@@ -1,9 +1,12 @@
 import json
-from src.utils import read_transactions
-from src.processing import sort_by_date
-from src.widget import get_date, mask_account_card
-from src.generators import transaction_descriptions, card_number_generator
+
+from src.external_api import (convert_transaction_amount_to_rub,
+                              get_exchange_rate)
+from src.generators import card_number_generator, transaction_descriptions
 from src.masks import get_mask_account, get_mask_card_number
+from src.processing import sort_by_date
+from src.utils import read_transactions
+from src.widget import get_date, mask_account_card
 
 
 def display_transactions(transactions):
@@ -20,11 +23,24 @@ def display_transactions(transactions):
         state = transaction.get("state", "N/A")
 
         # Маскируем номера карт и счетов
-        from_account = mask_account_card(transaction.get("from", ""))
+        from_account = transaction.get("from", "")
+        if from_account:
+            from_account = mask_account_card(from_account)
         to_account = mask_account_card(transaction.get("to", ""))
 
         amount = transaction.get("operationAmount", {}).get("amount", "N/A")
         currency = transaction.get("operationAmount", {}).get("currency", {}).get("code", "N/A")
+
+        # Конвертируем сумму в рубли, если валюта не RUB
+        if currency != "RUB":
+            amount_in_rub = convert_transaction_amount_to_rub(transaction)
+            if amount_in_rub is not None:
+                amount_in_rub = round(amount_in_rub, 2)  # Округляем до 2 знаков после запятой_
+                amount_info = f"{amount} {currency} (~{amount_in_rub} RUB)"
+            else:
+                amount_info = f"{amount} {currency} (Ошибка конвертации)"
+        else:
+            amount_info = f"{amount} {currency}"
 
         # Выводим информацию о транзакции
         print(f"ID: {transaction_id}, Дата: {date}, Статус: {state}")
@@ -33,7 +49,7 @@ def display_transactions(transactions):
             print(f"{from_account} -> {to_account}")
         else:
             print(f"Счет открыт -> {to_account}")
-        print(f"Сумма: {amount} {currency}")
+        print(f"Сумма: {amount_info}")
         print()
 
 
@@ -56,9 +72,29 @@ def generate_card_numbers():
 
 
 def display_transaction_descriptions(transactions):
-    """Функция для отображения описаний транзакций."""
-    for description in transaction_descriptions(transactions):
-        print(description)
+    """
+    Выводит описания транзакций. Если описание отсутствует, выводит "No description".
+    :param transactions: Список транзакций.
+    """
+    for transaction in transactions:  # Перебираем каждую транзакцию
+
+        # Получаем описание или "No description", если его нет
+        description = transaction.get("description", "No description")
+        print(description)  # Выводим описание
+
+
+def display_exchange_rate():
+    """Функция для запроса и отображения курса валюты."""
+    from_currency = input("Введите код валюты, курс которой хотите узнать (например, USD): ").strip().upper()
+    to_currency = input(
+        "Введите код валюты, в которую хотите конвертировать (например, RUB, EUR, по умолчанию RUB): ").strip().upper() or "RUB"
+
+    exchange_rate = get_exchange_rate(from_currency, to_currency)
+
+    if exchange_rate is not None:
+        print(f"Текущий курс {from_currency} к {to_currency}: {exchange_rate}")
+    else:
+        print("Не удалось получить курс обмена.")
 
 
 def main():
@@ -77,7 +113,8 @@ def main():
         print("2. Фильтровать транзакции по валюте")
         print("3. Сгенерировать номера карт")
         print("4. Вывести описания всех транзакций")
-        print("5. Выйти")
+        print("5. Узнать текущий курс валюты")
+        print("6. Выйти")
 
         choice = input("Ваш выбор: ").strip()
 
@@ -97,6 +134,9 @@ def main():
             display_transaction_descriptions(valid_transactions)
 
         elif choice == "5":
+            display_exchange_rate()
+
+        elif choice == "6":
             print("Выход из программы.")
             break
 
