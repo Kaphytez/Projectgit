@@ -31,9 +31,9 @@ def get_exchange_rate(from_currency: str, to_currency: str = "RUB") -> Optional[
     Returns:
         float: Курс обмена валюты, или None, если произошла ошибка.
     """
-
+    print(f"get_exchange_rate called with: {from_currency=}, {to_currency=}")  # Отладочный вывод
     if not EXCHANGE_RATES_BASE_URL:
-        print("Ошибка: Не установлена переменная окружения EXCHANGE_RATES_BASE_URL.")
+        print("EXCHANGE_RATES_BASE_URL is not set")  # Отладочный вывод
         return None
 
     url = f"{EXCHANGE_RATES_BASE_URL}latest"  # Базовый URL
@@ -48,19 +48,20 @@ def get_exchange_rate(from_currency: str, to_currency: str = "RUB") -> Optional[
     }
 
     try:
-        response = requests.get(url, headers=headers, params=params)  # Передача параметров
+        response = requests.get(url, headers=headers, params=params)
         response.raise_for_status()  # Raise HTTPError for bad responses (4xx or 5xx)
-        data = response.json()
-        if data and "rates" in data and to_currency in data["rates"]:
-            return float(data["rates"][to_currency])
-        else:
-            print(f"Ошибка: Не удалось получить курс обмена для {from_currency} в {to_currency}. Данные от API: {data}")
-            return None
     except requests.exceptions.RequestException as e:
-        print(f"Ошибка при запросе к API: {e}")
+        print(f"Exception in requests: {e}")  # Отладочный вывод
+        raise  # Re-raise the exception
+    except Exception as e:
+        print(f"Some other exception: {e}")  # Отладочный вывод
         return None
-    except (ValueError, KeyError) as e:
-        print(f"Ошибка при обработке ответа API: {e}")
+    data = response.json()
+    if data and "rates" in data and to_currency in data["rates"]:
+        return float(data["rates"][to_currency])
+    else:
+        print(
+            f"Ошибка: Не удалось получить курс обмена для {from_currency} в {to_currency}. Данные от API: {data}")
         return None
 
 
@@ -74,7 +75,13 @@ def convert_transaction_amount_to_rub(transaction: Dict[str, Any]) -> Optional[f
     Returns:
         float: Сумма транзакции в рублях, или None, если произошла ошибка.
     """
-    amount = float(transaction["operationAmount"]["amount"])
+    print("convert_transaction_amount_to_rub called")  # Отладочный вывод
+    try:
+        amount = float(transaction["operationAmount"]["amount"])
+    except ValueError as e:
+        print(f"ValueError: {e}")  # Отладочный вывод
+        return None
+
     currency = transaction["operationAmount"]["currency"]["code"]
 
     if currency == "RUB":

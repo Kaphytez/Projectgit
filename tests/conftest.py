@@ -210,10 +210,9 @@ def invalid_transactions():
 
 
 @pytest.fixture
-def mock_exchange_rate():
+def mock_exchange_rate(mocker):
     """Фикстура для мокирования get_exchange_rate."""
-    with patch('src.external_api.get_exchange_rate') as mock:  # Указываем мокировать через src
-        yield mock
+    return mocker.patch("src.external_api.get_exchange_rate")
 
 
 @pytest.fixture
