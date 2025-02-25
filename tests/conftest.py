@@ -220,3 +220,16 @@ def mock_env_vars(mocker):
     """Фикстура для мокирования переменных окружения."""
     mocker.patch.dict('os.environ',
                       {'EXCHANGE_RATES_API_KEY': 'test_key', 'EXCHANGE_RATES_BASE_URL': 'https://example.com'})
+
+
+@pytest.fixture
+def mock_get_exchange_rate(mocker):
+    """Фикстура, которая позволяет включить/выключить мокирование get_exchange_rate."""
+    def _mock_get_exchange_rate(return_value=None):
+        if return_value is None:
+            return mocker.patch('src.external_api.get_exchange_rate',
+                                side_effect=Exception("Failed to get exchange rate"))
+        else:
+            return mocker.patch('src.external_api.get_exchange_rate', return_value=return_value)
+
+    return _mock_get_exchange_rate

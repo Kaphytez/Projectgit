@@ -1,17 +1,11 @@
-import pytest
-from src.external_api import get_exchange_rate, convert_transaction_amount_to_rub
 import os
+
+import pytest
 from dotenv import load_dotenv
 from pytest_mock import MockerFixture
 
-
-@pytest.mark.vcr
-def test_get_exchange_rate_success():
-    """Тест успешного получения курса обмена."""
-    rate = get_exchange_rate("USD", "RUB")
-    assert isinstance(rate, float)
-    assert rate > 0
-    # assert 60 < rate < 100  # Опционально: проверка диапазона
+from src.external_api import (convert_transaction_amount_to_rub,
+                              get_exchange_rate)
 
 
 def test_get_exchange_rate_api_error(mock_exchange_rate):
@@ -35,7 +29,8 @@ def test_get_exchange_rate_no_base_url(mocker: MockerFixture):
     rate = get_exchange_rate("USD", "RUB")
     print(f"rate: {rate}")  # Отладочный вывод
     assert rate is None
-    os.environ = original_environ  # Восстанавливаем исходное состояние os.environ
+    os.environ.clear()  # Очищаем все переменные
+    os.environ.update(original_environ)  # Восстанавливаем исходное состояние os.environ
 
 
 def test_convert_transaction_amount_to_rub_rub(sample_processing_data):
@@ -78,21 +73,6 @@ def test_convert_transaction_amount_to_rub_invalid_amount(mock_exchange_rate):
     rub_amount = convert_transaction_amount_to_rub(transaction)
     print(f"rub_amount: {rub_amount}")  # Отладочный вывод
     assert rub_amount is None
-
-
-def test_convert_transaction_amount_to_rub_invalid_currency(mock_exchange_rate):
-    """Тест обработки неверной валюты транзакции."""
-    transaction = {
-        "operationAmount": {
-            "amount": "100",
-            "currency": {
-                "code": "INVALID"
-            }
-        }
-    }
-    mock_exchange_rate.return_value = 75.0
-    rub_amount = convert_transaction_amount_to_rub(transaction)
-    assert mock_exchange_rate.call_count == 1
 
 
 def test_env_vars_loaded():

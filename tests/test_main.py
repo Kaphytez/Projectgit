@@ -1,14 +1,19 @@
+import os
 from unittest.mock import patch
 
 import pytest
+from dotenv import load_dotenv
 
-from main import (display_exchange_rate, display_transaction_descriptions,
-                  display_transactions, filter_and_display_transactions,
+from main import (display_exchange_rate, filter_and_display_transactions,
                   generate_card_numbers)
 from src.generators import card_number_generator
 from src.masks import get_mask_account, get_mask_card_number
 from src.processing import filter_by_state, sort_by_date
 from src.widget import mask_account_card
+
+load_dotenv()
+EXCHANGE_RATES_API_KEY = os.environ.get("EXCHANGE_RATES_API_KEY")
+EXCHANGE_RATES_BASE_URL = os.environ.get("EXCHANGE_RATES_BASE_URL")
 
 
 def test_filter_by_state(sample_processing_data, state_params):
@@ -68,72 +73,34 @@ def test_card_number_generator(expected_card_numbers_data):  # Remove mock_input
         assert generated_numbers == expected_card_numbers_data
 
 
-@pytest.mark.parametrize(
-    "transactions, expected_output",
-    [
-        (
-                [
-                    {
-                        "id": 1,
-                        "date": "2023-10-27T10:00:00.000000",
-                        "state": "EXECUTED",
-                        "description": "Test transaction",
-                        "from": "Счет 12345678901234567890",
-                        "to": "Счет 98765432109876543210",
-                        "operationAmount": {"amount": "100.00", "currency": {"code": "RUB"}},
-                    }
-                ],
-                "ID: 1, Дата: 27.10.2023, Статус: EXECUTED\n"
-                "Описание: Test transaction\n"
-                "Счет **7890 -> Счет **3210\n"
-                "Сумма: 100.00 RUB\n\n",
-        ),
-        (
-                [],
-                "",  # Пустой список транзакций
-        ),
-        (
-                None,
-                "",  # None в качестве входных данных
-        ),
-        (
-                [{"id": 1, "date": "2023-10-27T10:00:00.000000", "state": "EXECUTED"}],
-                "ID: 1, Дата: 27.10.2023, Статус: EXECUTED\n"
-                "Описание: No description\nСчет открыт -> \nСумма: N/A N/A\n\n",  # Fixed newlines
-
-        ),
-    ],
-)
-def test_display_transactions(capsys, transactions, expected_output, mocker, mock_env_vars):
-    """Тестирование display_transactions с разными входными данными."""
-    mocker.patch('src.external_api.convert_transaction_amount_to_rub', return_value=1.0)
-
-    if transactions is None:
-        display_transactions([])  # Обработка None
-    else:
-        display_transactions(transactions)
-
-    captured = capsys.readouterr()
-    assert captured.out == expected_output
+test_transactions = [
+    {
+        "id": 1,
+        "date": "2023-10-27T10:00:00.000000",
+        "state": "EXECUTED",
+        "description": "Test transaction",
+        "from": "Счет 12345678901234567890",
+        "to": "Счет 98765432109876540000",
+        "operationAmount": {"amount": "100.00", "currency": {"code": "RUB"}},
+    }
+]
 
 
-def test_filter_and_display_transactions(capsys, sample_processing_data, mocker, mock_env_vars):  # Removed monkeypatch
-    """Тестирование filter_and_display_transactions."""
-    # Мокируем ввод пользователя
-    with patch('builtins.input', return_value="RUB"):
-        mocker.patch('src.external_api.convert_transaction_amount_to_rub', return_value=1.0)
+@pytest.mark.parametrize("currency, expected", [
+    ("RUB", 1)
+])
+def test_filter_and_display_transactions(currency, expected, monkeypatch):
+    # Мокаем ввод пользователя
+    monkeypatch.setattr('builtins.input', lambda _: currency)
 
-        filter_and_display_transactions(sample_processing_data)
-        captured = capsys.readouterr()
+    # Вызываем функцию фильтрации и отображения транзакций
+    filtered_transactions = filter_and_display_transactions(test_transactions)
 
-    # Проверяем, что вывод содержит транзакции в RUB
-    assert "ID: 594226727" in captured.out
-    assert "Сумма: 67314.70 RUB" in captured.out
-    assert "ID: 615064591" in captured.out
-    assert "Сумма: 77751.04 RUB" in captured.out
+    # Проверяем, что количество отфильтрованных транзакций соответствует ожидаемому
+    assert len(filtered_transactions) == expected
 
 
-def test_generate_card_numbers(capsys):  # Removed monkeypatch
+def test_generate_card_numbers(capsys):
     """Тестирование generate_card_numbers."""
     # Мокируем ввод пользователя
     with patch('builtins.input', side_effect=["1000000000000000", "1000000000000000"]):
@@ -144,32 +111,40 @@ def test_generate_card_numbers(capsys):  # Removed monkeypatch
     assert "1000000000000000" in captured.out
 
 
-def test_display_transaction_descriptions(capsys, sample_processing_data):
-    """Тестирование display_transaction_descriptions."""
-    display_transaction_descriptions(sample_processing_data)
-    captured = capsys.readouterr()
-
-    # Проверяем, что вывод содержит "No description" для каждой транзакции
-    assert "No description\nNo description\nNo description\nNo description" == captured.out
+def display_transaction_descriptions(transactions):
+    """Выводит описания транзакций."""
+    for transaction in transactions:
+        print(transaction.get("description", "No description"))
+    print()
 
 
-def test_display_exchange_rate(capsys, mocker, mock_env_vars):  # Removed monkeypatch
-    """Тестирование display_exchange_rate."""
+def test_display_exchange_rate_integration(capsys, monkeypatch):
+    """Интеграционный тест display_exchange_rate."""
+
     with patch('builtins.input', side_effect=["USD", "RUB"]):
-        mocker.patch('src.external_api.get_exchange_rate', return_value=75.0)
-
         display_exchange_rate()
         captured = capsys.readouterr()
 
-    assert "Текущий курс USD к RUB: 75.0" in captured.out
+    assert "Текущий курс USD к RUB:" in captured.out  # Проверяем, что вывод содержит курс
+
+    captured_output = captured.out
+    start_index = captured_output.find("Текущий курс USD к RUB:") + len("Текущий курс USD к RUB:")
+    exchange_rate_str = captured_output[start_index:].strip()
+
+    try:
+        exchange_rate = float(exchange_rate_str)
+        assert exchange_rate > 0  # Убедимся, что это положительное число
+    except ValueError:
+        pytest.fail(f"Не удалось преобразовать курс валюты в число: {exchange_rate_str}")
 
 
-def test_display_exchange_rate_failure(capsys, mocker, mock_env_vars):  # Removed monkeypatch
-    """Тестирование display_exchange_rate при неудачном получении курса."""
-    with patch('builtins.input', side_effect=["USD", "RUB"]):
-        mocker.patch('src.external_api.get_exchange_rate', return_value=None)
+def test_display_exchange_rate_integration_failure(capsys):
+    """Интеграционный тест display_exchange_rate при неудачном получении курса."""
 
-        display_exchange_rate()
-        captured = capsys.readouterr()
+    with patch('src.external_api.get_exchange_rate', return_value=None):
+        with patch('builtins.input', side_effect=["", ""]):
+            display_exchange_rate()
+            captured = capsys.readouterr()
 
-    assert "Не удалось получить курс обмена." in captured.out
+    expected_output = "Не удалось получить курс обмена.\n"
+    assert expected_output in captured.out

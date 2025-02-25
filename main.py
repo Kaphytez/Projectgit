@@ -1,56 +1,48 @@
-import json
+from datetime import datetime
 
 from src.external_api import (convert_transaction_amount_to_rub,
                               get_exchange_rate)
-from src.generators import card_number_generator, transaction_descriptions
-from src.masks import get_mask_account, get_mask_card_number
+from src.generators import card_number_generator
+from src.masks import get_mask_account
 from src.processing import sort_by_date
 from src.utils import read_transactions
-from src.widget import get_date, mask_account_card
 
 
 def display_transactions(transactions):
-    """Функция для отображения транзакций."""
+    """Выводит информацию о транзакциях."""
+    if not transactions:
+        return  # Exit early if transactions is None or empty
+
     for transaction in transactions:
-        # Проверяем, что транзакция содержит необходимые данные
-        if not transaction or "date" not in transaction:
-            continue  # Пропускаем пустые или некорректные записи
+        transaction_date = datetime.strptime(transaction["date"], "%Y-%m-%dT%H:%M:%S.%f").strftime("%d.%m.%Y")
+        description = transaction.get("description", "No description")  # Safe access
 
-        # Получаем ID, дату и статус транзакции
-        transaction_id = transaction.get("id", "N/A")
-        date = get_date(transaction.get("date", ""))
-        description = transaction.get("description", "No description")
-        state = transaction.get("state", "N/A")
+        from_account = get_mask_account(transaction.get("from", ""))  # "" - значение по умолчанию
+        to_account = get_mask_account(transaction.get("to", ""))
 
-        # Маскируем номера карт и счетов
-        from_account = transaction.get("from", "")
-        if from_account:
-            from_account = mask_account_card(from_account)
-        to_account = mask_account_card(transaction.get("to", ""))
-
-        amount = transaction.get("operationAmount", {}).get("amount", "N/A")
-        currency = transaction.get("operationAmount", {}).get("currency", {}).get("code", "N/A")
-
-        # Конвертируем сумму в рубли, если валюта не RUB
-        if currency != "RUB":
-            amount_in_rub = convert_transaction_amount_to_rub(transaction)
-            if amount_in_rub is not None:
-                amount_in_rub = round(amount_in_rub, 2)  # Округляем до 2 знаков после запятой_
-                amount_info = f"{amount} {currency} (~{amount_in_rub} RUB)"
-            else:
-                amount_info = f"{amount} {currency} (Ошибка конвертации)"
+        if "from" in transaction and "to" in transaction:
+            transaction_info = f"Счет {from_account} -> Счет {to_account}"
+        elif "to" in transaction:
+            transaction_info = f"Счет открыт -> {to_account}"  # Только получатель
+        elif "from" in transaction:
+            transaction_info = f"Счет {from_account} -> Счет открыт"  # Только отправитель
         else:
-            amount_info = f"{amount} {currency}"
+            transaction_info = "Счет открыт -> "  # Нет информации
 
-        # Выводим информацию о транзакции
-        print(f"ID: {transaction_id}, Дата: {date}, Статус: {state}")
-        print(f"Описание: {description}")
-        if from_account:
-            print(f"{from_account} -> {to_account}")
+        amount_in_rub = convert_transaction_amount_to_rub(transaction)
+
+        if (amount_in_rub is not None
+                and "operationAmount" in transaction
+                and "currency" in transaction["operationAmount"]):
+            currency_code = transaction["operationAmount"]["currency"]["code"]
+            amount_str = f"{amount_in_rub:.2f} {currency_code}"
         else:
-            print(f"Счет открыт -> {to_account}")
-        print(f"Сумма: {amount_info}")
-        print()
+            amount_str = "N/A N/A"
+
+        print(f"ID: {transaction['id']}, Дата: {transaction_date}, Статус: {transaction['state']}\n"
+              f"Описание: {description}\n"
+              f"{transaction_info}\n"
+              f"Сумма: {amount_str}\n\n")
 
 
 def filter_and_display_transactions(transactions):
@@ -60,7 +52,7 @@ def filter_and_display_transactions(transactions):
         t for t in transactions
         if t and t.get("operationAmount", {}).get("currency", {}).get("code") == currency
     ]
-    display_transactions(filtered_transactions)
+    return filtered_transactions
 
 
 def generate_card_numbers():
@@ -84,10 +76,9 @@ def display_transaction_descriptions(transactions):
 
 
 def display_exchange_rate():
-    """Функция для запроса и отображения курса валюты."""
-    from_currency = input("Введите код валюты, курс которой хотите узнать (например, USD): ").strip().upper()
-    to_currency = input(
-        "Введите код валюты, в которую хотите конвертировать (например, RUB, EUR, по умолчанию RUB): ").strip().upper() or "RUB"
+    """Выводит текущий курс обмена валюты."""
+    from_currency = input("Введите код валюты, курс которой хотите узнать (например, USD): ").upper()
+    to_currency = input("Введите код валюты, в которую хотите конвертировать (например, RUB): ").upper()
 
     exchange_rate = get_exchange_rate(from_currency, to_currency)
 
@@ -125,7 +116,8 @@ def main():
             display_transactions(sorted_transactions[:5])
 
         elif choice == "2":
-            filter_and_display_transactions(valid_transactions)
+            a = filter_and_display_transactions(valid_transactions)
+            display_transactions(a)
 
         elif choice == "3":
             generate_card_numbers()

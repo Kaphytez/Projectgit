@@ -1,4 +1,3 @@
-from datetime import datetime
 from typing import Any, Dict, List
 
 
@@ -32,4 +31,3 @@ def sort_by_date(data, ascending: bool = True) -> list:
         key=lambda x: x["date"],
         reverse=not ascending
     )
-
