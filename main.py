@@ -1,133 +1,140 @@
 from datetime import datetime
 
-from src import generators
-from src.processing import filter_by_state
-from src.widget import get_date, mask_account_card
+from src.external_api import (convert_transaction_amount_to_rub,
+                              get_exchange_rate)
+from src.generators import card_number_generator
+from src.masks import get_mask_account
+from src.processing import sort_by_date
+from src.utils import read_transactions
 
 
-def main_function(another_action, choice=None, state_filter=None, order=None, currency_filter=None,
-                  description_count=None, start=None, stop=None):
-    if another_action != 'да':
-        return None
+def display_transactions(transactions):
+    """Выводит информацию о транзакциях."""
+    if not transactions:
+        return  # Exit early if transactions is None or empty
 
-    transactions = [
-        {
-            "id": 939719570,
-            "state": "EXECUTED",
-            "date": "2018-06-30T02:08:58.425572",
-            "operationAmount": {
-                "amount": "9824.07",
-                "currency": {
-                    "name": "USD",
-                    "code": "USD"
-                }
-            },
-            "description": "Перевод организации",
-            "from": "Счет 75106830613657916952",
-            "to": "Счет 11776614605963066702"
-        },
-        {
-            "id": 142264268,
-            "state": "EXECUTED",
-            "date": "2019-04-04T23:20:05.206878",
-            "operationAmount": {
-                "amount": "79114.93",
-                "currency": {
-                    "name": "USD",
-                    "code": "USD"
-                }
-            },
-            "description": "Перевод со счета на счет",
-            "from": "Счет 19708645243227258542",
-            "to": "Счет 75651667383060284188"
-        }
+    for transaction in transactions:
+        transaction_date = datetime.strptime(transaction["date"], "%Y-%m-%dT%H:%M:%S.%f").strftime("%d.%m.%Y")
+        description = transaction.get("description", "No description")  # Safe access
+
+        from_account = get_mask_account(transaction.get("from", ""))  # "" - значение по умолчанию
+        to_account = get_mask_account(transaction.get("to", ""))
+
+        if "from" in transaction and "to" in transaction:
+            transaction_info = f"Счет {from_account} -> Счет {to_account}"
+        elif "to" in transaction:
+            transaction_info = f"Счет открыт -> {to_account}"  # Только получатель
+        elif "from" in transaction:
+            transaction_info = f"Счет {from_account} -> Счет открыт"  # Только отправитель
+        else:
+            transaction_info = "Счет открыт -> "  # Нет информации
+
+        amount_in_rub = convert_transaction_amount_to_rub(transaction)
+
+        if (amount_in_rub is not None
+                and "operationAmount" in transaction
+                and "currency" in transaction["operationAmount"]):
+            currency_code = transaction["operationAmount"]["currency"]["code"]
+            amount_str = f"{amount_in_rub:.2f} {currency_code}"
+        else:
+            amount_str = "N/A N/A"
+
+        print(f"ID: {transaction['id']}, Дата: {transaction_date}, Статус: {transaction['state']}\n"
+              f"Описание: {description}\n"
+              f"{transaction_info}\n"
+              f"Сумма: {amount_str}\n\n")
+
+
+def filter_and_display_transactions(transactions):
+    """Функция для фильтрации и отображения транзакций."""
+    currency = input("Введите код валюты для фильтрации (например, USD, RUB): ").strip().upper()
+    filtered_transactions = [
+        t for t in transactions
+        if t and t.get("operationAmount", {}).get("currency", {}).get("code") == currency
     ]
+    return filtered_transactions
 
-    def format_transaction(item):
-        """Вспомогательная функция для форматирования транзакции"""
-        return {
-            'date': get_date(item['date']),
-            'id': item['id'],
-            'state': item['state'],
-            'account': mask_account_card(item.get('from', '')),
-            'card': mask_account_card(item.get('card', '')),
-        }
 
-    all_transactions = transactions
+def generate_card_numbers():
+    """Функция для генерации номеров карт."""
+    start = int(input("Введите начальный номер карты: "))
+    stop = int(input("Введите конечный номер карты: "))
+    for card_number in card_number_generator(start, stop):
+        print(card_number)
 
-    # Убедимся, что choice не None
-    choice = choice or ""
 
-    if choice == 'f':
-        filtered_transactions = list(filter_by_state(all_transactions, state=state_filter or "EXECUTED"))
-        formatted_transactions = list(map(format_transaction, filtered_transactions))
-        return formatted_transactions
-    elif choice == 's':
-        sorted_transactions = sorted(all_transactions,
-                                     key=lambda x: datetime.strptime(x['date'], '%Y-%m-%dT%H:%M:%S.%f'),
-                                     reverse=(order == 'd'))
-        formatted_transactions = list(map(format_transaction, sorted_transactions))
-        return formatted_transactions
-    elif choice == 'c':
-        filtered_transactions = list(generators.filter_by_currency(all_transactions, currency_filter))
-        if not filtered_transactions:
-            return f"Транзакции с валютой {currency_filter} не найдены."
-        else:
-            return filtered_transactions
-    elif choice == 'd':  # Новая опция для генератора описаний
-        descriptions = generators.transaction_descriptions(all_transactions)
-        num_descriptions = int(description_count) if description_count else 5  # Кол-во из запроса или 5
-        result = []
-        for _ in range(num_descriptions):
-            try:
-                result.append(next(descriptions))
-            except StopIteration:
-                break  # Если транзакций меньше, чем запрошено
-        return result
-    elif choice.lower() == "k":
-        start_str = input("Введите начальный номер карты: ")
-        stop_str = input("Введите конечный номер карты: ")
-        try:
-            start = int(start_str)
-            stop = int(stop_str)
-        except ValueError:
-            print("Ошибка: 'start' и 'stop' должны быть целыми числами.")
-            return None
-        else:
-            if start > stop:
-                print("Ошибка: Начальный номер должен быть меньше или равен конечному.")
-                return None
-            else:
-                result = list(generators.card_number_generator(start, stop))
-                return result
+def display_transaction_descriptions(transactions):
+    """
+    Выводит описания транзакций. Если описание отсутствует, выводит "No description".
+    :param transactions: Список транзакций.
+    """
+    for transaction in transactions:  # Перебираем каждую транзакцию
+
+        # Получаем описание или "No description", если его нет
+        description = transaction.get("description", "No description")
+        print(description)  # Выводим описание
+
+
+def display_exchange_rate():
+    """Выводит текущий курс обмена валюты."""
+    from_currency = input("Введите код валюты, курс которой хотите узнать (например, USD): ").upper()
+    to_currency = input("Введите код валюты, в которую хотите конвертировать (например, RUB): ").upper()
+
+    exchange_rate = get_exchange_rate(from_currency, to_currency)
+
+    if exchange_rate is not None:
+        print(f"Текущий курс {from_currency} к {to_currency}: {exchange_rate}")
     else:
-        return "Программа завершена."
+        print("Не удалось получить курс обмена.")
+
+
+def main():
+    # Путь к файлу с данными
+    file_path = "data/operations.json"
+
+    # Чтение транзакций из файла
+    transactions = read_transactions(file_path)
+
+    # Фильтруем пустые или некорректные записи
+    valid_transactions = [t for t in transactions if t and "date" in t]
+
+    while True:
+        print("\nВыберите функцию:")
+        print("1. Вывести последние 5 транзакций (отсортированных по дате)")
+        print("2. Фильтровать транзакции по валюте")
+        print("3. Сгенерировать номера карт")
+        print("4. Вывести описания всех транзакций")
+        print("5. Узнать текущий курс валюты")
+        print("6. Выйти")
+
+        choice = input("Ваш выбор: ").strip()
+
+        if choice == "1":
+            # Сортировка транзакций по дате (по убыванию)
+            sorted_transactions = sort_by_date(valid_transactions, ascending=False)
+            # Вывод последних 5 транзакций
+            display_transactions(sorted_transactions[:5])
+
+        elif choice == "2":
+            a = filter_and_display_transactions(valid_transactions)
+            display_transactions(a)
+
+        elif choice == "3":
+            generate_card_numbers()
+
+        elif choice == "4":
+            display_transaction_descriptions(valid_transactions)
+
+        elif choice == "5":
+            display_exchange_rate()
+
+        elif choice == "6":
+            print("Выход из программы.")
+            break
+
+        else:
+            print("Неверный выбор. Пожалуйста, выберите снова.")
 
 
 if __name__ == "__main__":
-    another_action = input("Вы хотите выполнить операцию? (да/нет): ")
-    if another_action.lower() == "да":
-        choice = input(
-            "Выберите действие: (f - фильтрация по статусу, s - сортировка по дате, c - фильтрация по валюте,"
-            " d - генерация описаний, k - генерация карт): ")
-
-        if choice.lower() == "f":
-            state_filter = input("Введите статус для фильтрации (EXECUTED, CANCELED): ")
-            result = main_function(another_action, choice=choice.lower(), state_filter=state_filter.upper())
-        elif choice.lower() == "s":
-            order = input("Выберите порядок сортировки (a - по возрастанию, d - по убыванию): ")
-            result = main_function(another_action, choice=choice.lower(), order=order.lower())
-        elif choice.lower() == "c":
-            currency_filter = input("Введите код валюты для фильтрации (например, USD, RUB): ")
-            result = main_function(another_action, choice=choice.lower(), currency_filter=currency_filter.upper())
-        elif choice.lower() == "d":
-            description_count = input("Введите количество описаний для генерации: ")
-            result = main_function(another_action, choice=choice.lower(), description_count=description_count)
-        elif choice.lower() == "k":
-            result = main_function(another_action, choice=choice.lower())
-        else:
-            result = main_function(another_action)
-
-        print(result)
-    else:
-        print("Программа завершена.")
+    main()
