@@ -1,4 +1,5 @@
 import pytest
+
 from src.decorators import log  # Импортируем декоратор из основного файла
 
 
