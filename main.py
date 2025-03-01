@@ -1,9 +1,11 @@
+import logging
+import os
 from datetime import datetime
 
 from src.external_api import (convert_transaction_amount_to_rub,
                               get_exchange_rate)
 from src.generators import card_number_generator
-from src.masks import get_mask_account
+from src.masks import get_mask_account, get_mask_card_number
 from src.processing import sort_by_date
 from src.utils import read_transactions
 
@@ -17,15 +19,42 @@ def display_transactions(transactions):
         transaction_date = datetime.strptime(transaction["date"], "%Y-%m-%dT%H:%M:%S.%f").strftime("%d.%m.%Y")
         description = transaction.get("description", "No description")  # Safe access
 
-        from_account = get_mask_account(transaction.get("from", ""))  # "" - значение по умолчанию
-        to_account = get_mask_account(transaction.get("to", ""))
+        from_value = transaction.get("from", "")  # "" - значение по умолчанию
+        to_value = transaction.get("to", "")
+
+        from_account = ""
+        to_account = ""
+
+        # Определяем, что маскировать (счет или карту) для отправителя
+        from_type = "Счет"  # Значение по умолчанию
+        from_name = ""  # Название карты (Visa, MasterCard и т.д.)
+        if from_value:
+            if from_value.startswith("Счет"):
+                from_account = get_mask_account(from_value)
+            else:
+                from_account = get_mask_card_number(from_value)
+                from_type = "Карта"
+                # Извлекаем название карты
+                from_name = from_value.split()[0]
+
+        # Определяем, что маскировать (счет или карту) для получателя
+        to_type = "Счет"  # Значение по умолчанию
+        to_name = ""  # Название карты (Visa, MasterCard и т.д.)
+        if to_value:
+            if to_value.startswith("Счет"):
+                to_account = get_mask_account(to_value)
+            else:
+                to_account = get_mask_card_number(to_value)
+                to_type = "Карта"
+                # Извлекаем название карты
+                to_name = to_value.split()[0]
 
         if "from" in transaction and "to" in transaction:
-            transaction_info = f"Счет {from_account} -> Счет {to_account}"
+            transaction_info = f"{from_type} {from_name} {from_account} -> {to_type} {to_name} {to_account}"
         elif "to" in transaction:
-            transaction_info = f"Счет открыт -> {to_account}"  # Только получатель
+            transaction_info = f"{to_type} {to_name} открыт -> {to_account}"  # Только получатель
         elif "from" in transaction:
-            transaction_info = f"Счет {from_account} -> Счет открыт"  # Только отправитель
+            transaction_info = f"{from_type} {from_name} {from_account} -> Счет открыт"  # Только отправитель
         else:
             transaction_info = "Счет открыт -> "  # Нет информации
 
@@ -86,6 +115,31 @@ def display_exchange_rate():
         print(f"Текущий курс {from_currency} к {to_currency}: {exchange_rate}")
     else:
         print("Не удалось получить курс обмена.")
+
+
+if not os.path.exists("logs"):
+    os.makedirs("logs")
+
+# Настраиваем форматтер
+formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+
+
+# Функция для настройки логирования в файл
+def setup_logger(name, log_file, level=logging.INFO):
+    """Создает логер для записи в файл."""
+    handler = logging.FileHandler(log_file, mode='w')  # Режим 'w' для перезаписи
+    handler.setFormatter(formatter)
+
+    logger = logging.getLogger(name)
+    logger.setLevel(level)
+    logger.addHandler(handler)
+
+    return logger
+
+
+# Настраиваем логеры для masks.py и utils.py
+masks_logger = setup_logger("src.masks", "logs/masks.log")
+utils_logger = setup_logger("src.utils", "logs/utils.log")
 
 
 def main():

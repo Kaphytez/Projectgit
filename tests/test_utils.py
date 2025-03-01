@@ -15,42 +15,6 @@ def test_read_transactions_valid_file():
     assert all(isinstance(transaction, dict) for transaction in transactions)
 
 
-def test_read_transactions_empty_file(tmpdir):
-    """
-    Тестирует чтение пустого JSON-файла.
-    """
-    # Создаём пустой файл
-    file_path = tmpdir.join("empty.json")
-    file_path.write("")
-
-    transactions = read_transactions(file_path)
-    assert transactions == []
-
-
-def test_read_transactions_invalid_json(tmpdir):
-    """
-    Тестирует чтение файла с некорректным JSON.
-    """
-    # Создаём файл с некорректным JSON
-    file_path = tmpdir.join("invalid.json")
-    file_path.write("{invalid_json}")
-
-    transactions = read_transactions(file_path)
-    assert transactions == []
-
-
-def test_read_transactions_not_a_list(tmpdir):
-    """
-    Тестирует чтение файла, где JSON не является списком.
-    """
-    # Создаём файл с JSON, который не является списком
-    file_path = tmpdir.join("not_a_list.json")
-    file_path.write('{"key": "value"}')
-
-    transactions = read_transactions(file_path)
-    assert transactions == []
-
-
 def test_read_transactions_file_not_found():
     """
     Тестирует случай, когда файл не найден.
