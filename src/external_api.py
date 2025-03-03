@@ -71,24 +71,21 @@ def convert_transaction_amount_to_rub(transaction: Dict[str, Any]) -> Optional[f
     Returns:
         float: Сумма транзакции в рублях, или None, если произошла ошибка.
     """
-    if "operationAmount" not in transaction:
-        logging.warning("operationAmount отсутствует в транзакции.")
-        return None
-
     try:
-        amount = float(transaction["operationAmount"]["amount"])
-        currency = transaction["operationAmount"]["currency"]["code"]
-    except (ValueError, KeyError) as e:
-        logging.error(f"Ошибка при получении суммы/валюты транзакции: {e}")
+        amount = float(transaction["amount"])
+        local_currency = transaction["currency_code"]  # Changed variable name to avoid shadowing
+    except (ValueError, KeyError, TypeError) as e:
+        logging.warning(
+            f"Не удалось получить/обработать сумму транзакции или валюту. Ошибка: {e}. Транзакция: {transaction}")
         return None
 
-    if currency == "RUB":
+    if local_currency == "RUB":
         return amount
 
     # Если валюта не RUB, получаем курс обмена
-    exchange_rate = get_exchange_rate(currency)
+    exchange_rate = get_exchange_rate(local_currency, to_currency="RUB", amount=1.0)
     if exchange_rate is None:
-        logging.warning(f"Не удалось получить курс обмена для валюты {currency}.")
+        logging.warning(f"Не удалось получить курс обмена для валюты {local_currency}.")
         return None
 
     return amount * exchange_rate
