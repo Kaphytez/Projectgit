@@ -4,11 +4,10 @@ from datetime import datetime
 
 from src.external_api import (convert_transaction_amount_to_rub,
                               get_exchange_rate)
+from src.utils import read_transactions_csv, read_transactions_excel, read_transactions_json
 from src.generators import card_number_generator
 from src.masks import get_mask_account, get_mask_card_number
 from src.processing import sort_by_date
-# from src.utils import read_transactions #Удаляем этот импорт
-from src.file_readers import read_transactions_csv, read_transactions_excel
 
 logger = logging.getLogger(__name__)
 
@@ -158,6 +157,7 @@ def setup_logger(name, log_file, level=logging.INFO):
 # Настраиваем логеры для masks.py и utils.py
 masks_logger = setup_logger("src.masks", "logs/masks.log")
 utils_logger = setup_logger("src.utils", "logs/utils.log")
+external_api_logger = setup_logger("src.external_api", "logs/external_api.log")
 
 
 def main():
@@ -182,6 +182,9 @@ def main():
     elif file_ext == ".xlsx" or file_ext == ".xls":
         transactions_data = read_transactions_excel(file_path)
         logger.info("Transactions read from file {type}".format(type="Excel"))
+    elif file_ext == ".json":
+        transactions = read_transactions_json(file_path)
+        logger.info("Transactions read from file {type}".format(type="JSON"))
     else:
         logger.error(f"Unsupported file type: {file_ext}")
         print("Неподдерживаемый тип файла")
