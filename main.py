@@ -4,10 +4,10 @@ from datetime import datetime
 
 from src.external_api import (convert_transaction_amount_to_rub,
                               get_exchange_rate)
-from src.utils import read_transactions_csv, read_transactions_excel, read_transactions_json
 from src.generators import card_number_generator
 from src.masks import get_mask_account, get_mask_card_number
 from src.processing import sort_by_date
+from src.utils import read_transactions
 
 logger = logging.getLogger(__name__)
 
@@ -21,7 +21,8 @@ def display_transactions(transactions):
     for transaction in transactions:
         try:
             # Check for basic keys
-            if not all(key in transaction for key in ['id', 'state', 'date', 'amount', 'currency_code']):
+            if not all(key in transaction for key in
+                       ['id', 'state', 'date', 'operationAmount', 'description', 'from', 'to']):
                 print(f"Skipping transaction with missing keys: {transaction}")
                 logger.warning(f"Skipping transaction with missing keys: {transaction}")
                 continue
@@ -69,15 +70,13 @@ def display_transactions(transactions):
                 f"Счет открыт -> {to_account}" if to_value else \
                 f"{from_type} {from_account} -> Счет открыт" if from_value else "Счет открыт ->"
 
-            amount = transaction.get("amount")
-            currency_code = transaction.get("currency_code")
-            amount_in_rub = convert_transaction_amount_to_rub(transaction)  # Новый код
+            amount_in_rub = convert_transaction_amount_to_rub(transaction)
 
             # Анализ
             if amount_in_rub is not None:
                 amount_str = f"{amount_in_rub:.2f} RUB"  # Сумма в рублях
             else:
-                amount_str = f"{amount} {currency_code}"
+                amount_str = "N/A N/A"
                 logger.warning(
                     # Текст об ошибке
                     f"Не удалось конвертировать сумму для транзакции {transaction_id}. Отображается исходная сумма.")
@@ -145,13 +144,13 @@ formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(messag
 # Функция для настройки логирования в файл
 def setup_logger(name, log_file, level=logging.INFO):
     """Создает логер для записи в файл."""
-    logger = logging.getLogger(name)  # Добавили
-    logger.setLevel(level)
+    logger_main = logging.getLogger(name)  # Добавили
+    logger_main.setLevel(level)
     file_handler = logging.FileHandler(log_file, mode='w', encoding='utf-8')  # Режим 'w' для перезаписи
     file_handler.setFormatter(formatter)
-    logger.addHandler(file_handler)
+    logger_main.addHandler(file_handler)
 
-    return logger
+    return logger_main
 
 
 # Настраиваем логеры для masks.py и utils.py
@@ -159,41 +158,18 @@ masks_logger = setup_logger("src.masks", "logs/masks.log")
 utils_logger = setup_logger("src.utils", "logs/utils.log")
 external_api_logger = setup_logger("src.external_api", "logs/external_api.log")
 
+logger = logging.getLogger(__name__)  # Тут
+
 
 def main():
-    logger.info("Starting main function")  # Начало работы функции main
-
     # Путь к файлу с данными
-    file_path = input("Введите путь к файлу с транзакциями: ")
-    logger.debug(f"User provided file path: {file_path}")  # Логируем путь к файлу
+    file_path = input("Введите путь к файлу с данными: ")
 
-    # Проверяем, существует ли файл
-    if not os.path.exists(file_path):
-        logger.error(f"File not found: {file_path}")
-        print("Файл не найден.")
-        return  # Exit early if the file doesn't exist
+    # Чтение транзакций из файла
+    transactions = read_transactions(file_path)
 
-    # Определяем тип файла по расширению
-    file_ext = os.path.splitext(file_path)[1].lower()
-
-    if file_ext == ".csv":
-        transactions_data = read_transactions_csv(file_path)
-        logger.info("Transactions read from file {type}".format(type="CSV"))
-    elif file_ext == ".xlsx" or file_ext == ".xls":
-        transactions_data = read_transactions_excel(file_path)
-        logger.info("Transactions read from file {type}".format(type="Excel"))
-    elif file_ext == ".json":
-        transactions = read_transactions_json(file_path)
-        logger.info("Transactions read from file {type}".format(type="JSON"))
-    else:
-        logger.error(f"Unsupported file type: {file_ext}")
-        print("Неподдерживаемый тип файла")
-        return
-
-    # Используйте то же имя переменной, и код не будет работать
-    # valid_transactions = [t for t in transactions if t and "date" in t]
-    valid_transactions = [t for t in transactions_data if t and "date" in t]
-    logger.info("Valid transactions selected")
+    # Фильтруем пустые или некорректные записи
+    valid_transactions = [t for t in transactions if t and "date" in t]
 
     while True:
         print("\nВыберите функцию:")
@@ -216,8 +192,8 @@ def main():
 
         elif choice == "2":
             logger.info("Executing option 2: Filter transactions by currency")
-            # a = filter_and_display_transactions(valid_transactions)
-            display_transactions(filter_and_display_transactions(valid_transactions))
+            a = filter_and_display_transactions(valid_transactions)
+            display_transactions(a)
 
         elif choice == "3":
             logger.info("Executing option 3: Generate card numbers")

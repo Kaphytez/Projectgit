@@ -2,8 +2,7 @@ import csv
 import json
 import logging
 import os
-from typing import Dict, List, Union, cast
-
+from typing import Dict, List
 import pandas as pd
 
 # Настраиваем логер для этого модуля
@@ -11,101 +10,177 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)  # Уровень логирования по умолчанию
 
 
-def read_transactions_json(file_path: str) -> List[Dict]:
+def read_transactions(file_path: str) -> List[Dict]:
     """
-    Читает JSON-файл и возвращает список словарей с данными о транзакциях.
-
-    Аргументы:
-        file_path (str): Путь до JSON-файла.
-
-    Возвращает:
-        List[Dict]: Список словарей с данными о транзакциях. Если файл пустой,
-                   содержит не список или не найден, возвращает пустой список.
+    Читает файл с транзакциями, автоматически определяя тип файла (JSON, CSV или Excel).
+    Возвращает данные в едином формате.
     """
-    logger.debug(f"Reading transactions from file: {file_path}")  # Логируем путь к файлу
-    # Проверяем, существует ли файл
-    if not os.path.exists(file_path):
-        logger.error(f"File not found: {file_path}")  # Логируем ошибку
+    file_ext = os.path.splitext(file_path)[1].lower()
+    try:
+        if file_ext == ".json":
+            transactions = _read_transactions_json(file_path)
+        elif file_ext == ".csv":
+            transactions = _read_transactions_csv(file_path)
+        elif file_ext == ".xlsx" or file_ext == ".xls":
+            transactions = _read_transactions_excel(file_path)
+        else:
+            logger.error(f"Неподдерживаемый тип файла: {file_ext}")
+            return []
+        return transactions
+    except Exception as e:
+        logger.exception(f"An unexpected error occurred: {e}")
         return []
 
+
+def _read_transactions_json(file_path: str) -> List[Dict]:
+    """Читает JSON-файл и возвращает список словарей с данными о транзакциях."""
     try:
-        # Открываем файл и загружаем данные
         with open(file_path, "r", encoding="utf-8") as file:
             data = json.load(file)
-            logger.debug(f"Data read from file: {data}")  # Логируем прочитанные данные
-
-            # Проверяем, что данные являются списком
             if isinstance(data, list):
-                logger.info(f"Successfully read {len(data)} transactions from {file_path}")  # Логируем успех
+                logger.info(f"Успешно прочитано {len(data)} транзакций из JSON-файла: {file_path}")
                 return data
             else:
-                logger.warning(f"File {file_path} does not contain a list.")  # Логируем предупреждение
+                logger.warning(f"Файл {file_path} не содержит список.")
                 return []
     except (json.JSONDecodeError, FileNotFoundError) as e:
-        # Если файл пустой или содержит некорректный JSON
-        logger.exception(f"Error reading file {file_path}: {e}")  # Логируем исключение
+        logger.exception(f"Ошибка при чтении файла {file_path}: {e}")
         return []
 
 
-def read_transactions_csv(file_path: str) -> List[Dict[str, Union[str, int, float]]]:
-    """
-    Читает CSV-файл и возвращает список словарей с данными о транзакциях.
-    """
-    transactions: List[Dict[str, Union[str, int, float]]] = []
+def _read_transactions_csv(file_path: str) -> List[Dict]:
+    """Читает CSV-файл с автоматическим определением разделителя и гибким маппингом полей."""
+    transactions = []
     try:
         with open(file_path, mode='r', encoding='utf-8') as csvfile:
-            reader = csv.DictReader(csvfile, delimiter=';')
+            sample = csvfile.read(2048)
+            dialect = csv.Sniffer().sniff(sample)
+            csvfile.seek(0)
+
+            # Определение наличия заголовков и создание reader
+            has_header = csv.Sniffer().has_header(sample)
+            if has_header:
+                reader = csv.DictReader(csvfile, delimiter=str(dialect.delimiter))
+            else:
+                # Обработка CSV без заголовков
+                first_line = sample.splitlines()[0]
+                delimiter = str(dialect.delimiter)
+                fieldnames = [f"column_{i}" for i in range(len(first_line.split(delimiter)))]
+                reader = csv.DictReader(csvfile, delimiter=delimiter, fieldnames=fieldnames)
+
+            # Расширенный маппинг полей
+            field_mapping = {
+                'id': ['id', 'ID', 'идентификатор', 'column_0'],
+                'state': ['state', 'статус', 'State', 'column_1'],
+                'date': ['date', 'дата', 'Date', 'column_2'],
+                'amount': ['amount', 'сумма', 'Amount', 'column_3'],
+                'currency_code': ['currency_code', 'код_валюты', 'Currency Code', 'column_4'],
+                'currency_name': ['currency_name', 'название_валюты', 'Currency Name', 'column_5'],
+                'description': ['description', 'описание', 'Description', 'column_6'],
+                'from': ['from', 'отправитель', 'From', 'column_7'],
+                'to': ['to', 'получатель', 'To', 'column_8']
+            }
+
             for row in reader:
-                # Явно приводим тип row к Dict[str, str]
-                row_dict: Dict[str, str] = cast(Dict[str, str], row)
+                # Проверка типа данных строки
+                if not isinstance(row, dict):
+                    logger.warning(f"Пропуск строки {reader.line_num}: неверный формат данных ({type(row)})")
+                    continue
 
-                # Преобразуем значения к нужным типам
-                new_row: Dict[str, Union[str, int, float]] = {}
+                # Маппинг полей
+                mapped_data = {}
+                for target_field, possible_fields in field_mapping.items():
+                    value = None
+                    for field in possible_fields:
+                        if field in row:
+                            value = row[field].strip()  # Используем прямое обращение к ключу
+                            break
+                    mapped_data[target_field] = value if value is not None else None
+
+                # Валидация обязательных полей
+                required_fields = ['id', 'date', 'amount']
+                if any(mapped_data.get(field) in (None, '') for field in required_fields):
+                    logger.warning(f"Пропуск строки {reader.line_num}: отсутствуют обязательные поля")
+                    continue
+
+                # Создание транзакции
                 try:
-                    new_row['id'] = int(row_dict['id'])
-                except (ValueError, KeyError):
-                    new_row['id'] = row_dict.get('id',
-                                                 'N/A')
-                    logger.warning(f"Не удалось преобразовать 'id' в int в строке: {row_dict}")
+                    transaction = {
+                        "id": int(mapped_data['id']),
+                        "state": mapped_data.get('state', 'UNKNOWN'),
+                        "date": _parse_date(mapped_data['date']),
+                        "operationAmount": {
+                            "amount": float(mapped_data['amount'].replace(',', '.')),
+                            "currency": {
+                                "name": mapped_data.get('currency_name', 'UNKNOWN'),
+                                "code": mapped_data.get('currency_code', 'UNKNOWN')
+                            }
+                        },
+                        "description": mapped_data.get('description', ''),
+                        "from": mapped_data.get('from', ''),
+                        "to": mapped_data.get('to', '')
+                    }
+                    transactions.append(transaction)
+                except ValueError as e:
+                    logger.error(f"Ошибка в строке {reader.line_num}: {str(e)}")
+                except Exception as e:
+                    logger.exception(f"Критическая ошибка в строке {reader.line_num}: {str(e)}")
 
-                try:
-                    new_row['amount'] = float(row_dict['amount'])
-                except (ValueError, KeyError):
-                    new_row['amount'] = row_dict.get('amount',
-                                                     'N/A')
-                    logger.warning(f"Не удалось преобразовать 'amount' в float в строке: {row_dict}")
-
-                new_row['state'] = row_dict.get('state', 'N/A')  # Оставляем другие значения из файла
-                new_row['date'] = row_dict.get('date', 'N/A')
-                new_row['currency_name'] = row_dict.get('currency_name', 'N/A')
-                new_row['currency_code'] = row_dict.get('currency_code', 'N/A')
-                new_row['from'] = row_dict.get('from', 'N/A')
-                new_row['to'] = row_dict.get('to', 'N/A')
-                new_row['description'] = row_dict.get('description', 'N/A')
-                transactions.append(new_row)
-
-        logger.info(f"Успешно прочитано {len(transactions)} транзакций из CSV-файла: {file_path}")
-        return transactions
-    except FileNotFoundError:
-        logger.error(f"Ошибка: CSV-файл не найден по пути: {file_path}")
-        return []
+            logger.info(f"Успешно прочитано {len(transactions)} транзакций из CSV: {file_path}")
+            return transactions
     except Exception as e:
-        logger.exception(f"Ошибка: Произошла ошибка при чтении CSV-файла: {e}")
+        logger.exception(f"Ошибка при чтении CSV: {str(e)}")
         return []
 
 
-def read_transactions_excel(file_path: str) -> List[Dict]:
-    """
-    Читает Excel-файл и возвращает список словарей с данными о транзакциях.
-    """
+def _read_transactions_excel(file_path: str) -> List[Dict]:
+    """Читает Excel-файл с проверкой структуры и преобразованием даты."""
     try:
         df = pd.read_excel(file_path)
-        transactions: List[Dict] = df.to_dict(orient='records')
-        logger.info(f"Successfully read {len(transactions)} transactions from Excel file: {file_path}")
+
+        # Проверка обязательных колонок
+        required_columns = {'id', 'date', 'amount'}
+        if not required_columns.issubset(df.columns):
+            missing = required_columns - set(df.columns)
+            logger.error(f"Отсутствуют обязательные колонки: {', '.join(missing)}")
+            return []
+
+        transactions = []
+        for _, row in df.iterrows():
+            try:
+                # Преобразование даты в ISO-формат
+                date_str = _parse_date(str(row['date'])) if pd.notna(row['date']) else ''
+
+                transaction = {
+                    "id": int(row['id']),
+                    "state": str(row.get('state', 'UNKNOWN')),
+                    "date": date_str,
+                    "operationAmount": {
+                        "amount": float(row['amount']),
+                        "currency": {
+                            "name": str(row.get('currency_name', 'UNKNOWN')),
+                            "code": str(row.get('currency_code', 'UNKNOWN'))
+                        }
+                    },
+                    "description": str(row.get('description', '')),
+                    "from": str(row.get('from', '')),
+                    "to": str(row.get('to', ''))
+                }
+                transactions.append(transaction)
+            except Exception as e:
+                logger.warning(f"Пропуск строки {_}: {str(e)}")
+
+        logger.info(f"Успешно прочитано {len(transactions)} транзакций из Excel: {file_path}")
         return transactions
-    except FileNotFoundError:
-        logger.error(f"Error: Excel file not found at path: {file_path}")
-        return []
     except Exception as e:
-        logger.exception(f"Error: An error occurred while reading the Excel file: {e}")
+        logger.exception(f"Ошибка при чтении Excel: {str(e)}")
         return []
+
+
+def _parse_date(date_str: str) -> str:
+    """Универсальный парсинг даты с обработкой исключений."""
+    try:
+        return pd.to_datetime(date_str).strftime("%Y-%m-%dT%H:%M:%SZ")
+    except (ValueError, TypeError, pd.errors.ParserError) as e:  # Конкретные исключения
+        logger.warning(f"Ошибка преобразования даты '{date_str}': {str(e)}")
+        return date_str
