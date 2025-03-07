@@ -2,7 +2,8 @@ import csv
 import json
 import logging
 import os
-from typing import Dict, List
+from typing import Dict, List, Optional
+
 import pandas as pd
 
 # Настраиваем логер для этого модуля
@@ -41,7 +42,7 @@ def _read_transactions_json(file_path: str) -> List[Dict]:
                 logger.info(f"Успешно прочитано {len(data)} транзакций из JSON-файла: {file_path}")
                 return data
             else:
-                logger.warning(f"Файл {file_path} не содержит список.")
+                logger.error(f"Файл {file_path} не содержит список.")
                 return []
     except (json.JSONDecodeError, FileNotFoundError) as e:
         logger.exception(f"Ошибка при чтении файла {file_path}: {e}")
@@ -82,20 +83,19 @@ def _read_transactions_csv(file_path: str) -> List[Dict]:
             }
 
             for row in reader:
-                # Проверка типа данных строки
                 if not isinstance(row, dict):
                     logger.warning(f"Пропуск строки {reader.line_num}: неверный формат данных ({type(row)})")
                     continue
 
-                # Маппинг полей
-                mapped_data = {}
+                # Маппинг полей с явными проверками
+                mapped_data: Dict[str, Optional[str]] = {}
                 for target_field, possible_fields in field_mapping.items():
                     value = None
                     for field in possible_fields:
-                        if field in row:
-                            value = row[field].strip()  # Используем прямое обращение к ключу
+                        if field in row and row[field] is not None:
+                            value = str(row[field]).strip()
                             break
-                    mapped_data[target_field] = value if value is not None else None
+                    mapped_data[target_field] = value
 
                 # Валидация обязательных полей
                 required_fields = ['id', 'date', 'amount']
@@ -103,12 +103,16 @@ def _read_transactions_csv(file_path: str) -> List[Dict]:
                     logger.warning(f"Пропуск строки {reader.line_num}: отсутствуют обязательные поля")
                     continue
 
-                # Создание транзакции
                 try:
+                    # Явные проверки типов
+                    assert mapped_data['id'] is not None, "ID отсутствует"
+                    assert mapped_data['date'] is not None, "Дата отсутствует"
+                    assert mapped_data['amount'] is not None, "Сумма отсутствует"
+
                     transaction = {
                         "id": int(mapped_data['id']),
                         "state": mapped_data.get('state', 'UNKNOWN'),
-                        "date": _parse_date(mapped_data['date']),
+                        "date": parse_date(mapped_data['date']),
                         "operationAmount": {
                             "amount": float(mapped_data['amount'].replace(',', '.')),
                             "currency": {
@@ -121,7 +125,7 @@ def _read_transactions_csv(file_path: str) -> List[Dict]:
                         "to": mapped_data.get('to', '')
                     }
                     transactions.append(transaction)
-                except ValueError as e:
+                except (ValueError, AssertionError) as e:
                     logger.error(f"Ошибка в строке {reader.line_num}: {str(e)}")
                 except Exception as e:
                     logger.exception(f"Критическая ошибка в строке {reader.line_num}: {str(e)}")
@@ -149,7 +153,7 @@ def _read_transactions_excel(file_path: str) -> List[Dict]:
         for _, row in df.iterrows():
             try:
                 # Преобразование даты в ISO-формат
-                date_str = _parse_date(str(row['date'])) if pd.notna(row['date']) else ''
+                date_str = parse_date(str(row['date'])) if pd.notna(row['date']) else ''
 
                 transaction = {
                     "id": int(row['id']),
@@ -177,10 +181,12 @@ def _read_transactions_excel(file_path: str) -> List[Dict]:
         return []
 
 
-def _parse_date(date_str: str) -> str:
+def parse_date(date_str: str) -> str:
     """Универсальный парсинг даты с обработкой исключений."""
     try:
         return pd.to_datetime(date_str).strftime("%Y-%m-%dT%H:%M:%SZ")
-    except (ValueError, TypeError, pd.errors.ParserError) as e:  # Конкретные исключения
-        logger.warning(f"Ошибка преобразования даты '{date_str}': {str(e)}")
+    except (ValueError, TypeError, pd.errors.ParserError):
+        # Унифицированное сообщение на русском
+        error_message = f"Невозможно распознать формат даты: '{date_str}'"
+        logger.warning(f"Ошибка преобразования даты '{date_str}': {error_message}")
         return date_str

@@ -66,7 +66,8 @@ def display_transactions(transactions):
                     to_account = get_mask_card_number(to_value)
                     to_type = "Карта"
 
-            transaction_info = f"{from_type} {from_account} -> {to_type} {to_account}" if from_value and to_value else \
+            transaction_info = f"{from_type} {from_account} -> {to_type} {to_account}"\
+                if from_value and to_value else \
                 f"Счет открыт -> {to_account}" if to_value else \
                 f"{from_type} {from_account} -> Счет открыт" if from_value else "Счет открыт ->"
 
