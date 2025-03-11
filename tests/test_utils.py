@@ -134,7 +134,7 @@ def test_read_invalid_file_format(tmp_path):
 ])
 def test_parse_date(date_str, expected):
     with patch("src.utils.logger") as mock_logger:
-        result = _parse_date(date_str)
+        result = parse_date(date_str)
         if expected == "invalid":
             mock_logger.warning.assert_called_with(
                 f"Ошибка преобразования даты '{date_str}': Невозможно распознать формат даты: '{date_str}'"

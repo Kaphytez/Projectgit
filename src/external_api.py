@@ -4,6 +4,8 @@ from typing import Any, Dict, Optional, Union
 
 import requests
 from dotenv import load_dotenv
+from requests.adapters import HTTPAdapter
+from urllib3 import Retry
 
 # Настройка логирования
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -21,43 +23,51 @@ def get_exchange_rate(from_currency: str, to_currency: str = "RUB", amount: floa
     Args:
         from_currency (str): Код валюты, курс которой нужно получить (например, "USD").
         to_currency (str): Код валюты, в которую нужно конвертировать (по умолчанию "RUB").
-        amount (float): Cумма для конвертации
+        amount (float): Сумма для конвертации.
 
     Returns:
         float: Курс обмена валюты, или None, если произошла ошибка.
     """
     if not EXCHANGE_RATES_BASE_URL:
-        logging.error("EXCHANGE_RATES_BASE_URL is not set.")  # Используем логирование
+        logging.error("EXCHANGE_RATES_BASE_URL is not set.")
         return None
 
     url = f"{EXCHANGE_RATES_BASE_URL}convert"
 
-    params: Dict[str, Union[str, float]] = {  # Указываем типы
+    params: Dict[str, Union[str, float]] = {
         "to": to_currency,
         "from": from_currency,
         "amount": amount
     }
 
-    headers = {
-        "apikey": EXCHANGE_RATES_API_KEY
-    }
+    headers = {"apikey": EXCHANGE_RATES_API_KEY}
+
+    # Настройка повторных попыток
+    session = requests.Session()
+    retries = Retry(
+        total=3,
+        backoff_factor=0.3,
+        status_forcelist=[500, 502, 503, 504],
+        allowed_methods=["GET"]
+    )
+    session.mount("https://", HTTPAdapter(max_retries=retries))
 
     try:
-        response = requests.get(url, headers=headers, params=params)
-        response.raise_for_status()  # Поднимает HTTPError для плохих ответов (4xx или 5xx)
+        response = session.get(url, headers=headers, params=params)
+        response.raise_for_status()
         data = response.json()
+
         if data and "result" in data:
-            return float(data["result"]) / amount  # Используем "result" и делим на amount
+            return float(data["result"]) / amount
         else:
-            logging.warning(
-                f"Не удалось получить курс обмена для {from_currency} в {to_currency}. Данные от API: {data}")
+            logging.warning(f"Не удалось получить курс обмена для {from_currency} в {to_currency}.")
             return None
 
-    except requests.exceptions.RequestException as e:  # Обрабатываем ошибки сети
-        logging.error(f"Ошибка при запросе к API: {e}")
-        return None
-    except (KeyError, ValueError) as e:  # Обрабатываем ошибки в структуре JSON
-        logging.error(f"Ошибка при обработке ответа API: {e}")
+    except requests.exceptions.RequestException as e:
+        error_msg = str(e)
+        if isinstance(e, requests.exceptions.HTTPError) and hasattr(e, "response"):
+            error_msg = f"{e.response.status_code} {e}"
+        logging.error(f"Ошибка при запросе к API: {error_msg}")
         return None
 
 
@@ -72,20 +82,18 @@ def convert_transaction_amount_to_rub(transaction: Dict[str, Any]) -> Optional[f
         float: Сумма транзакции в рублях, или None, если произошла ошибка.
     """
     try:
-        amount = float(transaction["amount"])
-        local_currency = transaction["currency_code"]  # Changed variable name to avoid shadowing
-    except (ValueError, KeyError, TypeError) as e:
-        logging.warning(
-            f"Не удалось получить/обработать сумму транзакции или валюту. Ошибка: {e}. Транзакция: {transaction}")
+        amount = float(transaction["operationAmount"]["amount"])
+        currency_code = transaction["operationAmount"]["currency"]["code"]
+    except (KeyError, ValueError, TypeError) as e:
+        logging.warning(f"Ошибка в структуре транзакции: {e}")
         return None
 
-    if local_currency == "RUB":
+    if currency_code == "RUB":
         return amount
 
-    # Если валюта не RUB, получаем курс обмена
-    exchange_rate = get_exchange_rate(local_currency, to_currency="RUB", amount=1.0)
+    exchange_rate = get_exchange_rate(currency_code, "RUB", 1.0)
     if exchange_rate is None:
-        logging.warning(f"Не удалось получить курс обмена для валюты {local_currency}.")
+        logging.warning(f"Не удалось получить курс для валюты {currency_code}.")
         return None
 
     return amount * exchange_rate

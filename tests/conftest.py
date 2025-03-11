@@ -1,8 +1,12 @@
 import os
 import sys
+from typing import Optional
 from unittest.mock import patch
+from urllib.error import HTTPError
 
 import pytest
+import requests
+from pytest_mock import MockerFixture
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'src')))
 
@@ -233,3 +237,41 @@ def mock_get_exchange_rate(mocker):
             return mocker.patch('src.external_api.get_exchange_rate', return_value=return_value)
 
     return _mock_get_exchange_rate
+
+
+@pytest.fixture
+def mock_api_ratelimit(mocker: MockerFixture):
+    """Фикстура для эмуляции ошибки TooManyRequests"""
+    mock_response = mocker.Mock()
+    mock_response.status_code = 429  # Статус 429
+    mock_response.raise_for_status.side_effect = requests.exceptions.HTTPError(
+        "429 Too Many Requests",
+        response=mock_response  # Обязательно передаем response
+    )
+    return mocker.patch("requests.Session.get", return_value=mock_response)  # Мокируем Session.get
+
+
+@pytest.fixture
+def create_mock_response(mocker: MockerFixture):
+    def _create_mock_response(status_code: int, result: Optional[float] = None):
+        mock_resp = mocker.Mock()
+        mock_resp.status_code = status_code
+        mock_resp.headers = {
+            "Content-Type": "application/json",
+            "Set-Cookie": [],  # Используем список вместо строки
+        }
+        mock_resp.history = []
+        mock_resp.url = "https://api.apilayer.com/exchangerates_data/convert"
+        mock_resp.is_redirect = False
+        mock_resp.links = {}
+
+        if result is not None:
+            mock_resp.json.return_value = {"result": result}
+            mock_resp.raise_for_status.return_value = None
+        else:
+            mock_resp.raise_for_status.side_effect = requests.exceptions.HTTPError(
+                f"{status_code} Error",
+                response=mock_resp
+            )
+        return mock_resp
+    return _create_mock_response
