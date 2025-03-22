@@ -1,7 +1,7 @@
 import os
 import sys
 from typing import Optional
-from unittest.mock import patch
+from unittest.mock import patch, Mock
 from urllib.error import HTTPError
 
 import pytest
@@ -222,13 +222,15 @@ def mock_exchange_rate(mocker):
 @pytest.fixture
 def mock_env_vars(mocker):
     """Фикстура для мокирования переменных окружения."""
-    mocker.patch.dict('os.environ',
-                      {'EXCHANGE_RATES_API_KEY': 'test_key', 'EXCHANGE_RATES_BASE_URL': 'https://example.com'})
+    mocker.patch.dict(os.environ,
+                      {'EXCHANGE_RATES_API_KEY': 'test_key', 'EXCHANGE_RATES_BASE_URL': 'https://example.com'},
+                      clear=True)
 
 
 @pytest.fixture
 def mock_get_exchange_rate(mocker):
     """Фикстура, которая позволяет включить/выключить мокирование get_exchange_rate."""
+
     def _mock_get_exchange_rate(return_value=None):
         if return_value is None:
             return mocker.patch('src.external_api.get_exchange_rate',
@@ -241,14 +243,25 @@ def mock_get_exchange_rate(mocker):
 
 @pytest.fixture
 def mock_api_ratelimit(mocker: MockerFixture):
-    """Фикстура для эмуляции ошибки TooManyRequests"""
-    mock_response = mocker.Mock()
-    mock_response.status_code = 429  # Статус 429
-    mock_response.raise_for_status.side_effect = requests.exceptions.HTTPError(
-        "429 Too Many Requests",
-        response=mock_response  # Обязательно передаем response
-    )
-    return mocker.patch("requests.Session.get", return_value=mock_response)  # Мокируем Session.get
+    """Фикстура для эмуляции ошибки Too Many Requests"""
+    mock_response = Mock()
+    mock_response.status_code = 429
+    mock_response.reason = "Too Many Requests"
+    mock_response.url = "https://example.com/convert"
+    mock_response.headers = {"Content-Type": "application/json"}
+    mock_response.json.return_value = {"error": "Too Many Requests"}
+
+    # Создаем HTTPError без response
+    http_error = HTTPError("429 Too Many Requests")
+
+    # Устанавливаем атрибут response вручную
+    http_error.response = mock_response
+
+    # Мокируем Session.get
+    mock_session_get = mocker.patch('requests.Session.get', return_value=mock_response)
+    mock_session_get.return_value.raise_for_status.side_effect = http_error
+
+    return mock_session_get
 
 
 @pytest.fixture
@@ -274,4 +287,5 @@ def create_mock_response(mocker: MockerFixture):
                 response=mock_resp
             )
         return mock_resp
+
     return _create_mock_response

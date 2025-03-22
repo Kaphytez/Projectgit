@@ -47,12 +47,13 @@ def get_exchange_rate(from_currency: str, to_currency: str = "RUB", amount: floa
     retries = Retry(
         total=3,
         backoff_factor=0.3,
-        status_forcelist=[500, 502, 503, 504],
+        status_forcelist=[500, 502, 503, 504, 429],
         allowed_methods=["GET"]
     )
     session.mount("https://", HTTPAdapter(max_retries=retries))
 
     try:
+        print(f"URL запроса: {url}")  # Временно оставить
         response = session.get(url, headers=headers, params=params)
         response.raise_for_status()
         data = response.json()
@@ -65,7 +66,8 @@ def get_exchange_rate(from_currency: str, to_currency: str = "RUB", amount: floa
 
     except requests.exceptions.RequestException as e:
         error_msg = str(e)
-        if isinstance(e, requests.exceptions.HTTPError) and hasattr(e, "response"):
+        if isinstance(e,
+                      requests.exceptions.HTTPError) and e.response is not None:  # Проверяем, что response существует
             error_msg = f"{e.response.status_code} {e}"
         logging.error(f"Ошибка при запросе к API: {error_msg}")
         return None

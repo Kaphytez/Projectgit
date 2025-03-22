@@ -115,31 +115,40 @@ def test_conversion_with_retry_logic():
 
 
 # Обновленные тесты для обработки лимитов
-def test_convert_with_rate_limits(sample_processing_data, mock_api_ratelimit, caplog):
+def test_convert_with_rate_limits(sample_processing_data, mocker, caplog, mock_env_vars):
     """Тест конвертации с превышением лимита запросов"""
+    # Мокируем session.get
+    mock_session_get = mocker.patch("requests.Session.get")
+    mock_response = Mock()
+    mock_response.raise_for_status.side_effect = HTTPError("429 Too Many Requests")
+    mock_session_get.return_value = mock_response
+
     transaction = sample_processing_data[0]  # Транзакция в USD
+    with caplog.at_level(logging.WARNING):
+        result = convert_transaction_amount_to_rub(transaction)
+        print(f"Результат конвертации: {result}")  # Отладка
+        print(f"Логи: {caplog.text}")  # Отладка
 
-    # Вызываем функцию
-    result = convert_transaction_amount_to_rub(transaction)
-
-    # Проверки
-    assert result is None, "Функция должна вернуть None при ошибке 429"
-    assert "Не удалось получить курс обмена для валюты USD." in caplog.text
-
-    # Убеждаемся, что Session.get был вызван
-    mock_api_ratelimit.assert_called_once()
+        # Проверки
+        assert result is None, "Функция должна вернуть None при ошибке 429"
+        assert "Не удалось получить курс для валюты USD." in caplog.text
+        mock_session_get.assert_called_once()
+        mock_session_get.return_value.raise_for_status.assert_called_once()
 
 
 # Дополнения к существующим тестам
 def test_get_exchange_rate_no_base_url(mocker: MockerFixture, caplog):
     """Тест отсутствия базового URL с проверкой логов"""
-    mocker.patch.dict('os.environ', {}, clear=True)
+    # Мокируем EXCHANGE_RATES_BASE_URL в модуле external_api
+    mocker.patch("src.external_api.EXCHANGE_RATES_BASE_URL", None)
 
     with caplog.at_level(logging.ERROR):
         rate = get_exchange_rate("USD")
+        print(f"Rate: {rate}")  # Отладка
+        print(f"Caplog text: {caplog.text}")  # Отладка
 
     assert rate is None
-    assert "EXCHANGE_RATES_BASE_URL is not set" in caplog.text
+    assert "EXCHANGE_RATES_BASE_URL is not set." in caplog.text
 
 
 def test_env_vars_loaded():
