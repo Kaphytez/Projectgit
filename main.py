@@ -111,15 +111,12 @@ def generate_card_numbers():
 
 
 def display_transaction_descriptions(transactions):
-    """
-    Выводит описания транзакций. Если описание отсутствует, выводит "No description".
-    :param transactions: Список транзакций.
-    """
-    for transaction in transactions:  # Перебираем каждую транзакцию
-
-        # Получаем описание или "No description", если его нет
+    """Выводит описания транзакций. Если описание отсутствует или пустое, выводит 'No description'."""
+    for transaction in transactions:
         description = transaction.get("description", "No description")
-        print(description)  # Выводим описание
+        if not description:  # Проверяем, пустая ли строка
+            description = "No description"
+        print(description)
 
 
 def display_exchange_rate():
@@ -163,14 +160,12 @@ logger = logging.getLogger(__name__)  # Тут
 
 
 def main():
-    # Путь к файлу с данными
+    logger.info("Starting program")  # Добавляем лог о старте программы
     file_path = input("Введите путь к файлу с данными: ")
-
-    # Чтение транзакций из файла
+    logger.debug(f"Reading transactions from file: {file_path}")
     transactions = read_transactions(file_path)
-
-    # Фильтруем пустые или некорректные записи
     valid_transactions = [t for t in transactions if t and "date" in t]
+    logger.info(f"Loaded {len(valid_transactions)} valid transactions")  # Лог о количестве транзакций
 
     while True:
         print("\nВыберите функцию:")
@@ -186,14 +181,13 @@ def main():
 
         if choice == "1":
             logger.info("Executing option 1: Display last 5 transactions")
-            # Сортировка транзакций по дате (по убыванию)
             sorted_transactions = sort_by_date(valid_transactions, ascending=False)
-            # Вывод последних 5 транзакций
             display_transactions(sorted_transactions[:5])
 
         elif choice == "2":
             logger.info("Executing option 2: Filter transactions by currency")
             a = filter_and_display_transactions(valid_transactions)
+            logger.info(f"Filtered {len(a)} transactions by currency")
             display_transactions(a)
 
         elif choice == "3":
