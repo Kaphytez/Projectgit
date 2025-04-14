@@ -1,8 +1,12 @@
 import os
 import sys
-from unittest.mock import patch
+from typing import Optional
+from unittest.mock import patch, Mock
+from urllib.error import HTTPError
 
 import pytest
+import requests
+from pytest_mock import MockerFixture
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'src')))
 
@@ -218,13 +222,15 @@ def mock_exchange_rate(mocker):
 @pytest.fixture
 def mock_env_vars(mocker):
     """Фикстура для мокирования переменных окружения."""
-    mocker.patch.dict('os.environ',
-                      {'EXCHANGE_RATES_API_KEY': 'test_key', 'EXCHANGE_RATES_BASE_URL': 'https://example.com'})
+    mocker.patch.dict(os.environ,
+                      {'EXCHANGE_RATES_API_KEY': 'test_key', 'EXCHANGE_RATES_BASE_URL': 'https://example.com'},
+                      clear=True)
 
 
 @pytest.fixture
 def mock_get_exchange_rate(mocker):
     """Фикстура, которая позволяет включить/выключить мокирование get_exchange_rate."""
+
     def _mock_get_exchange_rate(return_value=None):
         if return_value is None:
             return mocker.patch('src.external_api.get_exchange_rate',
@@ -233,3 +239,53 @@ def mock_get_exchange_rate(mocker):
             return mocker.patch('src.external_api.get_exchange_rate', return_value=return_value)
 
     return _mock_get_exchange_rate
+
+
+@pytest.fixture
+def mock_api_ratelimit(mocker: MockerFixture):
+    """Фикстура для эмуляции ошибки Too Many Requests"""
+    mock_response = Mock()
+    mock_response.status_code = 429
+    mock_response.reason = "Too Many Requests"
+    mock_response.url = "https://example.com/convert"
+    mock_response.headers = {"Content-Type": "application/json"}
+    mock_response.json.return_value = {"error": "Too Many Requests"}
+
+    # Создаем HTTPError без response
+    http_error = HTTPError("429 Too Many Requests")
+
+    # Устанавливаем атрибут response вручную
+    http_error.response = mock_response
+
+    # Мокируем Session.get
+    mock_session_get = mocker.patch('requests.Session.get', return_value=mock_response)
+    mock_session_get.return_value.raise_for_status.side_effect = http_error
+
+    return mock_session_get
+
+
+@pytest.fixture
+def create_mock_response(mocker: MockerFixture):
+    def _create_mock_response(status_code: int, result: Optional[float] = None):
+        mock_resp = mocker.Mock()
+        mock_resp.status_code = status_code
+        mock_resp.headers = {
+            "Content-Type": "application/json",
+            "Set-Cookie": [],  # Используем список вместо строки
+        }
+        mock_resp.history = []
+        mock_resp.url = "https://api.apilayer.com/exchangerates_data/convert"
+        mock_resp.is_redirect = False
+        mock_resp.links = {}
+
+        if result is not None:
+            mock_resp.json.return_value = {"result": result}
+            mock_resp.raise_for_status.return_value = None
+        else:
+            mock_resp.raise_for_status.side_effect = requests.exceptions.HTTPError(
+                f"{status_code} Error",
+                response=mock_resp
+            )
+        return mock_resp
+
+    return _create_mock_response
