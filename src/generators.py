@@ -29,26 +29,3 @@ def card_number_generator(start: int, stop: int):
     for i in range(start, stop + 1):
         yield str(i).zfill(16)
 
-
-def filter_by_currency(transactions: list[dict], currency: str):
-    """
-    Фильтрует список транзакций по указанной валюте.
-    Безопасно обрабатывает транзакции без информации о валюте.
-
-    Args:
-        transactions: Список словарей, представляющих транзакции.
-        currency: Код валюты для фильтрации (например, "USD", "RUB").
-
-    Yields:
-        Словари транзакций, соответствующие указанной валюте.
-    """
-    for transaction in transactions:
-        try:
-            if transaction.get('operationAmount', {}).get('currency', {}).get('code') == currency:
-                yield transaction
-        except AttributeError:
-            # Handle cases where transaction['operationAmount']['currency'] is not a dictionary
-            pass
-        except TypeError:
-            # Handle cases where transaction['operationAmount'] or transaction['currency'] is None
-            pass

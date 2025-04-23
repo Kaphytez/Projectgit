@@ -8,7 +8,6 @@ import pandas as pd
 
 # Настраиваем логер для этого модуля
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)  # Уровень логирования по умолчанию
 
 
 def read_transactions(file_path: str) -> List[Dict]:
