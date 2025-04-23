@@ -1,226 +1,262 @@
 import logging
 import os
 from datetime import datetime
+# Импортируем нужные функции из соответствующих модулей
 
-from src.external_api import (convert_transaction_amount_to_rub,
-                              get_exchange_rate)
-from src.generators import card_number_generator
 from src.masks import get_mask_account, get_mask_card_number
-from src.processing import sort_by_date
+from src.processing import (  # Оставляем только используемые функции обработки
+    filter_by_currency, filter_by_description_keyword,
+    filter_by_state, sort_by_date
+)
 from src.utils import read_transactions
 
-logger = logging.getLogger(__name__)
+# --- 1. Создание директории для логов ---
+LOG_DIR = "logs"
+try:
+    os.makedirs(LOG_DIR, exist_ok=True)
+except OSError as e:
+    print(f"Не удалось создать директорию '{LOG_DIR}': {e}. Выход.")
+    exit(1)
+
+# --- 2. Настройка Логирования ---
+log_formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 
 
-def display_transactions(transactions):
-    """Выводит информацию о транзакциях."""
-    if not transactions:
-        print("No transactions to display.")
+def setup_logger(name, log_file_name, level=logging.INFO):
+    """Настраивает и возвращает логгер для записи в указанный файл."""
+    log_path = os.path.join(LOG_DIR, log_file_name)
+    logger_instance = logging.getLogger(name)
+    logger_instance.setLevel(level)
+    file_handler = logging.FileHandler(log_path, mode='w', encoding='utf-8')
+    file_handler.setFormatter(log_formatter)
+    if not any(isinstance(h, logging.FileHandler) and h.baseFilename == file_handler.baseFilename for h in
+               logger_instance.handlers):
+        logger_instance.addHandler(file_handler)
+    return logger_instance
+
+
+# Настраиваем логгеры (можно оставить как есть)
+utils_logger = setup_logger('src.utils', 'utils.log')
+processing_logger = setup_logger('src.processing', 'processing.log')
+masks_logger = setup_logger('src.masks', 'masks.log')
+external_api_logger = setup_logger('src.external_api', 'external_api.log')
+logger = setup_logger('__main__', 'main.log')
+
+
+# --- 3. Вспомогательные функции для ввода ---
+
+def get_validated_input(prompt: str, valid_options: set, case_sensitive: bool = False) -> str:
+    """Запрашивает ввод у пользователя, пока он не введет один из valid_options."""
+    while True:
+        user_input = input(prompt).strip()
+        processed_input = user_input if case_sensitive else user_input.upper()
+
+        if processed_input in valid_options:
+            return processed_input  # Возвращаем обработанный ввод (обычно upper)
+        else:
+            print(f"Некорректный ввод '{user_input}'. Доступные опции: {', '.join(valid_options)}")
+            logger.warning(f"Некорректный ввод от пользователя: '{user_input}'. Ожидалось: {valid_options}")
+
+
+def get_yes_no_input(prompt: str) -> bool:
+    """Получает ответ Да/Нет от пользователя."""
+    # Приводим "да" к True, "нет" к False
+    valid_options = {"ДА", "НЕТ"}
+    response = get_validated_input(f"{prompt} (Да/Нет): ", valid_options)
+    return response == "ДА"
+
+
+# --- 4. Обновленная функция вывода транзакций ---
+
+def display_transactions_final(transactions_to_display):
+    """Выводит информацию о транзакциях в формате, указанном в ТЗ."""
+    if not transactions_to_display:
+        print("\nНе найдено ни одной транзакции, подходящей под ваши условия фильтрации.")
+        logger.info("Итоговая выборка транзакций пуста.")
         return
 
-    for transaction in transactions:
+    print(f"\nВсего банковских операций в выборке: {len(transactions_to_display)}")
+    logger.info(f"Вывод {len(transactions_to_display)} итоговых транзакций.")
+
+    for transaction in transactions_to_display:
         try:
-            # Check for basic keys
-            if not all(key in transaction for key in
-                       ['id', 'state', 'date', 'operationAmount', 'description', 'from', 'to']):
-                print(f"Skipping transaction with missing keys: {transaction}")
-                logger.warning(f"Skipping transaction with missing keys: {transaction}")
-                continue
-
-            transaction_id = transaction['id']
-            transaction_state = transaction['state']
-            transaction_date = transaction['date']
-
-            # Format date
+            # Дата
+            date_str = "Дата N/A"
             try:
-                transaction_date = datetime.strptime(transaction_date, "%Y-%m-%dT%H:%M:%SZ").strftime("%d.%m.%Y")
-            except ValueError:
-                logger.error(f"Invalid date format: {transaction_date}")
-                transaction_date = "N/A"  # Set to "N/A" for invalid formats
+                date_raw = transaction.get("date", "")
+                if date_raw:
+                    date_str = datetime.strptime(date_raw, "%Y-%m-%dT%H:%M:%SZ").strftime("%d.%m.%Y")
+            except (ValueError, TypeError) as date_err:
+                logger.error(
+                    f"Ошибка форматирования даты '{transaction.get('date')}'"
+                    f" для ID {transaction.get('id')}: {date_err}")
+                date_str = f"Дата ({transaction.get('date')})"  # Показываем исходную дату при ошибке
 
-            description = transaction.get('description', "No description")  # Provide a default value
+            # Описание
+            description = transaction.get("description", "Нет описания")
 
-            from_value = transaction.get('from', "")
-            to_value = transaction.get('to', "")
+            # Откуда/Куда (маскирование)
+            from_value = transaction.get("from", "")
+            to_value = transaction.get("to", "")
+            from_masked = get_mask_account(from_value) if "Счет" in from_value else get_mask_card_number(
+                from_value) if from_value else ""
+            to_masked = get_mask_account(to_value) if "Счет" in to_value else get_mask_card_number(
+                to_value) if to_value else ""
 
-            from_account = ""
-            to_account = ""
-            from_type = ""  # Тип карты или счет
-            to_type = ""  # Тип карты или счет
-
-            # Определяем, что маскировать (счет или карту) для отправителя
-            if from_value:
-                if "Счет" in from_value:
-                    from_account = get_mask_account(from_value)
-                    from_type = "Счет"
+            # Формирование строки "откуда -> куда"
+            transaction_info = ""
+            if from_masked and to_masked:
+                transaction_info = f"{from_masked} -> {to_masked}"
+            elif to_masked:  # Пополнение или открытие вклада
+                # Если в описании "Открытие вклада", используем только "куда"
+                if "открытие вклада" not in description.lower():
+                    transaction_info = f"-> {to_masked}"  # Используем пустую строку как источник
                 else:
-                    from_account = get_mask_card_number(from_value)
-                    from_type = "Карта"
+                    transaction_info = to_masked  # Только счет для вклада
+            elif from_masked:  # Перевод куда-то без указания
+                transaction_info = f"{from_masked} -> ????"
 
-            # Определяем, что маскировать (счет или карту) для получателя
-            if to_value:
-                if "Счет" in to_value:
-                    to_account = get_mask_account(to_value)
-                    to_type = "Счет"
-                else:
-                    to_account = get_mask_card_number(to_value)
-                    to_type = "Карта"
+            # Сумма
+            amount = "Сумма N/A"
+            currency = ""
+            op_amount_info = transaction.get('operationAmount', {})
+            if op_amount_info:
+                amount_val = op_amount_info.get('amount')
+                currency_code = op_amount_info.get('currency', {}).get('code')
+                if amount_val is not None and currency_code:
+                    try:
+                        amount = f"{float(amount_val):.2f}"  # Форматируем до 2 знаков
+                        currency = currency_code
+                    except (ValueError, TypeError):
+                        amount = f"Сумма ({amount_val})"  # Исходное значение при ошибке
+                        currency = currency_code if currency_code else ""
 
-            transaction_info = f"{from_type} {from_account} -> {to_type} {to_account}"\
-                if from_value and to_value else \
-                f"Счет открыт -> {to_account}" if to_value else \
-                f"{from_type} {from_account} -> Счет открыт" if from_value else "Счет открыт ->"
+            # Вывод
+            print(f"\n{date_str} {description}")
+            if transaction_info:  # Выводим строку from/to, если она сформирована
+                print(transaction_info)
+            print(f"Сумма: {amount} {currency}".strip())  # Убираем лишний пробел, если валюты нет
 
-            amount_in_rub = convert_transaction_amount_to_rub(transaction)
-
-            # Анализ
-            if amount_in_rub is not None:
-                amount_str = f"{amount_in_rub:.2f} RUB"  # Сумма в рублях
-            else:
-                amount_str = "N/A N/A"
-                logger.warning(
-                    # Текст об ошибке
-                    f"Не удалось конвертировать сумму для транзакции {transaction_id}. Отображается исходная сумма.")
-
-            print(f"ID: {transaction_id}, Дата: {transaction_date}, Статус: {transaction_state}\n"
-                  f"Описание: {description}\n"
-                  f"{transaction_info}\n"
-                  f"Сумма: {amount_str}\n\n")
-
-        except Exception as e:
-            logger.error(f"Error processing transaction: {e}. Transaction: {transaction}")
-            print("Error processing transaction, see the log for more details.")
-
-
-def filter_and_display_transactions(transactions):
-    """Функция для фильтрации и отображения транзакций."""
-    currency = input("Введите код валюты для фильтрации (например, USD, RUB): ").strip().upper()
-    filtered_transactions = [
-        t for t in transactions
-        if t and t.get("operationAmount", {}).get("currency", {}).get("code") == currency
-    ]
-    return filtered_transactions
+        except Exception as ex:  # Оставляем Exception, но используем ex в логе
+            # Используем logger.error с exc_info=True для traceback'а
+            # и включаем 'ex' в сообщение, чтобы использовать переменную.
+            logger.error(
+                f"Критическая ошибка при обработке транзакции ID {transaction.get('id', 'N/A')}:"
+                f" {ex}. Данные транзакции: {transaction}",
+                exc_info=True  # Добавляет полный traceback в лог
+            )
+            print(
+                f"\n! Ошибка обработки транзакции ID {transaction.get('id', 'N/A')}."
+                f" См. {LOG_DIR}/main.log для деталей.")
+        print("-" * 20)
 
 
-def generate_card_numbers():
-    """Функция для генерации номеров карт."""
-    start = int(input("Введите начальный номер карты: "))
-    stop = int(input("Введите конечный номер карты: "))
-    for card_number in card_number_generator(start, stop):
-        print(card_number)
-
-
-def display_transaction_descriptions(transactions):
-    """Выводит описания транзакций. Если описание отсутствует или пустое, выводит 'No description'."""
-    for transaction in transactions:
-        description = transaction.get("description", "No description")
-        if not description:  # Проверяем, пустая ли строка
-            description = "No description"
-        print(description)
-
-
-def display_exchange_rate():
-    """Выводит текущий курс обмена валюты."""
-    from_currency = input("Введите код валюты, курс которой хотите узнать (например, USD): ").upper()
-    to_currency = input("Введите код валюты, в которую хотите конвертировать (например, RUB): ").upper()
-
-    exchange_rate = get_exchange_rate(from_currency, to_currency)
-
-    if exchange_rate is not None:
-        print(f"Текущий курс {from_currency} к {to_currency}: {exchange_rate}")
-    else:
-        print("Не удалось получить курс обмена.")
-
-
-if not os.path.exists("logs"):
-    os.makedirs("logs")
-
-# Настраиваем форматтер
-formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-
-
-# Функция для настройки логирования в файл
-def setup_logger(name, log_file, level=logging.INFO):
-    """Создает логер для записи в файл."""
-    logger_main = logging.getLogger(name)  # Добавили
-    logger_main.setLevel(level)
-    file_handler = logging.FileHandler(log_file, mode='w', encoding='utf-8')  # Режим 'w' для перезаписи
-    file_handler.setFormatter(formatter)
-    logger_main.addHandler(file_handler)
-
-    return logger_main
-
-
-# Настраиваем логеры для masks.py и utils.py
-masks_logger = setup_logger("src.masks", "logs/masks.log")
-utils_logger = setup_logger("src.utils", "logs/utils.log")
-external_api_logger = setup_logger("src.external_api", "logs/external_api.log")
-
-logger = logging.getLogger(__name__)  # Тут
-
-
+# --- 5. Основная функция main (переписанная) ---
 def main():
-    logger.info("Starting program")  # Добавляем лог о старте программы
-    file_path = input("Введите путь к файлу с данными: ")
-    logger.debug(f"Reading transactions from file: {file_path}")
+    """Главная функция, управляющая workflow приложения."""
+    logger.info("Программа запущена (новый сценарий).")
+    print("Привет! Добро пожаловать в программу работы с банковскими транзакциями.")
+
+    # --- Выбор файла ---
+    print("\nВыберите необходимый пункт меню:")
+    print("1. Получить информацию о транзакциях из JSON-файла")
+    print("2. Получить информацию о транзакциях из CSV-файла")
+    print("3. Получить информацию о транзакциях из XLSX-файла")
+
+    file_choice = get_validated_input("Ваш выбор (1, 2 или 3): ", {"1", "2", "3"})
+
+    file_path = ""
+    file_type_msg = ""
+    if file_choice == "1":
+        # Путь к файлу по умолчанию или запросить у пользователя?
+        # Используем стандартное имя в папке data, как в структуре проекта
+        file_path = os.path.join("data", "operations.json")
+        file_type_msg = "JSON-файл"
+    elif file_choice == "2":
+        file_path = os.path.join("data", "transactions.csv")
+        file_type_msg = "CSV-файл"
+    elif file_choice == "3":
+        file_path = os.path.join("data", "transactions_excel.xlsx")
+        file_type_msg = "XLSX-файл"
+
+    print(f"\nДля обработки выбран {file_type_msg}.")
+    logger.info(f"Выбран тип файла: {file_type_msg}, путь: {file_path}")
+
+    # --- Чтение транзакций ---
     transactions = read_transactions(file_path)
-    valid_transactions = [t for t in transactions if t and "date" in t]
-    logger.info(f"Loaded {len(valid_transactions)} valid transactions")  # Лог о количестве транзакций
+    if not transactions:
+        logger.error(f"Не удалось прочитать транзакции или файл пуст: {file_path}")
+        print(f"Не удалось загрузить данные из {file_path}. Проверьте наличие файла и его формат. См. логи.")
+        logger.info("Программа завершена из-за ошибки загрузки данных.")
+        return
 
-    while True:
-        print("\nВыберите функцию:")
-        print("1. Вывести последние 5 транзакций (отсортированных по дате)")
-        print("2. Фильтровать транзакции по валюте")
-        print("3. Сгенерировать номера карт")
-        print("4. Вывести описания всех транзакций")
-        print("5. Узнать текущий курс валюты")
-        print("6. Выйти")
+    # Фильтруем некорректные записи (без даты) ДО основной логики
+    initial_count = len(transactions)
+    transactions = [t for t in transactions if t and isinstance(t.get("date"), str) and t.get("date")]
+    valid_count = len(transactions)
+    if initial_count != valid_count:
+        logger.warning(f"Исключено {initial_count - valid_count} транзакций из-за отсутствия/неверного формата даты.")
 
-        choice = input("Ваш выбор: ").strip()
-        logger.debug(f"User selected option: {choice}")
+    if not transactions:
+        logger.error("После проверки дат не осталось корректных транзакций.")
+        print("В файле не найдено корректных транзакций с датами.")
+        return
 
-        if choice == "1":
-            logger.info("Executing option 1: Display last 5 transactions")
-            sorted_transactions = sort_by_date(valid_transactions, ascending=False)
-            display_transactions(sorted_transactions[:5])
+    logger.info(f"Загружено {valid_count} корректных транзакций.")
 
-        elif choice == "2":
-            logger.info("Executing option 2: Filter transactions by currency")
-            a = filter_and_display_transactions(valid_transactions)
-            logger.info(f"Filtered {len(a)} transactions by currency")
-            display_transactions(a)
+    # --- Фильтрация по статусу ---
+    valid_statuses = {"EXECUTED", "CANCELED", "PENDING"}
+    prompt_status = (f"\nВведите статус, по которому необходимо выполнить фильтрацию.\n"
+                     f"Доступные для фильтровки статусы: {', '.join(sorted(list(valid_statuses)))}: ")
+    chosen_status = get_validated_input(prompt_status, valid_statuses)
 
-        elif choice == "3":
-            logger.info("Executing option 3: Generate card numbers")
-            generate_card_numbers()
+    transactions = filter_by_state(transactions, chosen_status)
+    print(f"Операции отфильтрованы по статусу \"{chosen_status}\"")
+    logger.info(f"Транзакции отфильтрованы по статусу: {chosen_status}. Осталось: {len(transactions)}")
 
-        elif choice == "4":
-            logger.info("Executing option 4: Display transaction descriptions")
-            display_transaction_descriptions(valid_transactions)
+    if not transactions:  # Если после фильтрации по статусу ничего не осталось
+        display_transactions_final(transactions)  # Выведет сообщение "Не найдено..."
+        return
 
-        elif choice == "5":
-            logger.info("Executing option 5: Display exchange rate")
-            display_exchange_rate()
+    # --- Сортировка по дате ---
+    if get_yes_no_input("\nОтсортировать операции по дате?"):
+        sort_asc = get_yes_no_input("Отсортировать по возрастанию (Да) или по убыванию (Нет)?")
+        direction_msg = "по возрастанию" if sort_asc else "по убыванию"
+        print(f"Сортировка по дате ({direction_msg}).")
+        transactions = sort_by_date(transactions, ascending=sort_asc)
+        logger.info(f"Транзакции отсортированы по дате ({direction_msg}).")
 
-        elif choice == "6":
-            print("Выход из программы.")
-            logger.info("Exiting program")
-            break
+    # --- Фильтрация по рублевым транзакциям ---
+    if get_yes_no_input("\nВыводить только рублевые транзакции?"):
+        transactions = list(filter_by_currency(transactions, "RUB"))
+        print("Отфильтрованы только рублевые транзакции.")
+        logger.info(f"Отфильтрованы рублевые транзакции. Осталось: {len(transactions)}")
+        if not transactions:
+            display_transactions_final(transactions)
+            return
 
+    # --- Фильтрация по слову в описании ---
+    if get_yes_no_input("\nОтфильтровать список транзакций по определенному слову в описании?"):
+        keyword = input("Введите слово для поиска в описании: ").strip()
+        if keyword:
+            transactions = list(filter_by_description_keyword(transactions, keyword))
+            print(f"Отфильтрованы транзакции по слову '{keyword}'.")
+            logger.info(f"Отфильтрованы транзакции по ключевому слову '{keyword}'. Осталось: {len(transactions)}")
+            if not transactions:
+                display_transactions_final(transactions)
+                return
         else:
-            print("Неверный выбор. Пожалуйста, выберите снова.")
-            logger.warning(f"Invalid choice selected: {choice}")
+            print("Ключевое слово не введено, фильтрация по описанию пропущена.")
+            logger.info("Фильтрация по описанию пропущена (пустое слово).")
 
-        logger.info("Operation complete. Waiting for next input.")
+    # --- Вывод итогового списка ---
+    print("\nРаспечатываю итоговый список транзакций...")
+    display_transactions_final(transactions)
 
-    logger.info("Program finished")
+    logger.info("Программа успешно завершена (новый сценарий).")
 
 
+# --- 6. Точка входа ---
 if __name__ == "__main__":
-    logging.basicConfig(
-        level=logging.INFO,
-        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-        filename="logs/main.log",
-        filemode="w"
-    )
+    # Настройка логирования выполнена в начале файла
     main()

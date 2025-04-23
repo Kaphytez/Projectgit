@@ -1,7 +1,6 @@
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Generator, Optional
 import re
 import logging
-
 
 logger = logging.getLogger(__name__)
 
@@ -79,7 +78,7 @@ def extract_operation_code(description: str) -> Optional[str]:
     Returns:
         Найденный код операции (только XXXX) или None, если код не найден.
     """
-    if not isinstance(description, str): # Проверка, что на вход пришла строка
+    if not isinstance(description, str):  # Проверка, что на вход пришла строка
         return None
 
     # Шаблон:
@@ -99,3 +98,84 @@ def extract_operation_code(description: str) -> Optional[str]:
     else:
         # logger.debug(f"Код операции не найден в '{description}'") # Можно добавить для отладки
         return None
+
+
+def categorize_transactions(transactions: List[Dict[str, Any]], categories: List[str]) -> Dict[str, int]:
+    """
+    Подсчитывает количество операций по заданным категориям на основе описаний.
+
+    Проверяет наличие каждой категории (как подстроки, без учета регистра)
+    в поле 'description' каждой транзакции.
+
+    Args:
+        transactions: Список словарей с данными о банковских операциях.
+                      Ожидается наличие ключа 'description'.
+        categories: Список строк-категорий для поиска в описаниях.
+
+    Returns:
+        Словарь, где ключи - это названия категорий (из списка `categories`),
+        а значения - количество операций, в описании которых найдена
+        соответствующая категория (как подстрока, case-insensitive).
+        Если категория не найдена ни разу, ее значение будет 0.
+    """
+    # Инициализируем словарь для подсчета: каждая категория начинается с 0
+    category_counts: Dict[str, int] = {category: 0 for category in categories}
+
+    # Проверяем, что список категорий не пуст, чтобы не делать лишней работы
+    if not categories:
+        logger.warning("Список категорий для анализа пуст.")
+        return category_counts
+
+    logger.info(f"Начало категоризации {len(transactions)} транзакций по категориям: {categories}")
+
+    for i, transaction in enumerate(transactions):
+        # Безопасно получаем описание, приводим к строке и нижнему регистру
+        description = str(transaction.get("description", "")).lower()
+
+        # Если описание пустое, переходим к следующей транзакции
+        if not description:
+            # logger.debug(f"Транзакция {i+1} (ID: {transaction.get('id', 'N/A')}) пропущена - пустое описание.")
+            continue
+
+        # Проверяем наличие каждой категории в описании
+        for category in categories:
+            # Ищем категорию (приведенную к нижнему регистру) как подстроку в описании
+            if category.lower() in description:
+                # Если нашли, увеличиваем счетчик для этой категории
+                category_counts[category] += 1
+                # Важно: Одна транзакция может попасть в несколько категорий,
+                # если ее описание содержит несколько ключевых слов.
+                # Например, "Оплата за интернет и телефон" увеличит счетчики
+                # и для "интернет", и для "телефон", если они есть в `categories`.
+                # Логируем первое найденное совпадение для транзакции (для примера)
+
+    logger.info(f"Категоризация завершена. Результаты: {category_counts}")
+    return category_counts
+
+
+def filter_by_description_keyword(transactions: List[Dict[str, Any]], keyword: str)\
+        -> Generator[Dict[str, Any], None, None]:
+    """
+    Фильтрует транзакции по наличию ключевого слова в описании (без учета регистра).
+
+    Args:
+        transactions: Список словарей транзакций.
+        keyword: Ключевое слово для поиска в поле 'description'.
+
+    Yields:
+        Словарь транзакции, если ключевое слово найдено в описании.
+    """
+    if not keyword:  # Если передано пустое слово, не фильтруем
+        logger.warning("Передано пустое ключевое слово для фильтрации по описанию.")
+        # Возвращаем все транзакции как генератор
+        for transaction in transactions:
+            yield transaction
+        return  # Явный выход
+
+    search_term = keyword.lower()
+    logger.info(f"Фильтрация по ключевому слову в описании: '{search_term}'")
+
+    for transaction in transactions:
+        description = str(transaction.get("description", "")).lower()
+        if search_term in description:
+            yield transaction
