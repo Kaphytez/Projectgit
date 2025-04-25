@@ -1,6 +1,6 @@
 import os
 import sys
-from typing import Optional
+from typing import Optional, List, Dict, Any
 from unittest.mock import patch, Mock
 from urllib.error import HTTPError
 
@@ -289,3 +289,45 @@ def create_mock_response(mocker: MockerFixture):
         return mock_resp
 
     return _create_mock_response
+
+
+@pytest.fixture
+def transactions_with_descriptions() -> List[Dict[str, Any]]:
+    """Возвращает список транзакций с разными описаниями."""
+    return [
+        {
+            "id": 1, "state": "EXECUTED", "date": "2024-01-01T10:00:00.000000",
+            "description": "Перевод средств OP-1234 другу",
+            "operationAmount": {"amount": "100.00", "currency": {"code": "RUB"}}
+        },
+        {
+            "id": 2, "state": "EXECUTED", "date": "2024-01-02T11:00:00.000000",
+            "description": "Оплата ЖКХ",
+            "operationAmount": {"amount": "5000.50", "currency": {"code": "RUB"}}
+        },
+        {
+            "id": 3, "state": "CANCELED", "date": "2024-01-03T12:00:00.000000",
+            "description": "Покупка в супермаркете OP-5678",
+            "operationAmount": {"amount": "1500.00", "currency": {"code": "RUB"}}
+        },
+        {
+            "id": 4, "state": "EXECUTED", "date": "2024-01-04T13:00:00.000000",
+            "description": "Оплата интернета",
+            "operationAmount": {"amount": "50.00", "currency": {"code": "USD"}}
+        },
+        {
+            "id": 5, "state": "EXECUTED", "date": "2024-01-05T14:00:00.000000",
+            "description": "Кафе Вечер",  # Без кода операции
+            "operationAmount": {"amount": "25.00", "currency": {"code": "USD"}}
+        },
+        {
+            "id": 6, "state": "PENDING", "date": "2024-01-06T15:00:00.000000",
+            "description": None,  # Отсутствующее описание
+            "operationAmount": {"amount": "10.00", "currency": {"code": "EUR"}}
+        },
+        {
+            "id": 7, "state": "EXECUTED", "date": "2024-01-07T16:00:00.000000",
+            "description": "Перевод на карту",  # Нет конкретного слова категории из примера ниже
+            "operationAmount": {"amount": "200.00", "currency": {"code": "RUB"}}
+        }
+    ]
