@@ -3,6 +3,7 @@ import json
 import logging
 import os
 from typing import Dict, List, Optional
+from src.decorators import log
 
 import pandas as pd
 
@@ -10,6 +11,7 @@ import pandas as pd
 logger = logging.getLogger(__name__)
 
 
+@log
 def read_transactions(file_path: str) -> List[Dict]:
     """
     Читает файл с транзакциями, автоматически определяя тип файла (JSON, CSV или Excel).

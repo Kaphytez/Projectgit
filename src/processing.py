@@ -81,22 +81,14 @@ def extract_operation_code(description: str) -> Optional[str]:
     if not isinstance(description, str):  # Проверка, что на вход пришла строка
         return None
 
-    # Шаблон:
-    # 'OP-' - ищем префикс OP-
-    # '(\d{4})' - ищем ровно 4 цифры (\d{4}). Скобки создают "захватывающую группу",
-    #             чтобы мы могли извлечь только цифры.
-    # re.IGNORECASE - делает поиск нечувствительным к регистру (найдет op-1234 и OP-1234)
     pattern = r"OP-(\d{4})"
     match = re.search(pattern, description, re.IGNORECASE)
 
     if match:
-        # Если найдено совпадение, match.group(0) содержит всю найденную подстроку ('OP-1234')
-        # match.group(1) содержит только то, что попало в первую захватывающую группу (скобки) - '1234'
         operation_code = match.group(1)
         logger.info(f"Извлечен код операции: {operation_code} из '{description}'")
         return operation_code
     else:
-        # logger.debug(f"Код операции не найден в '{description}'") # Можно добавить для отладки
         return None
 
 

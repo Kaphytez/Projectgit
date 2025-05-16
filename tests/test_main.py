@@ -1,271 +1,294 @@
 import os
-from unittest.mock import patch
+import sys
+from datetime import datetime
+from io import StringIO
+from unittest.mock import patch, call  # Добавляем call для проверки логов
 
 import pytest
-from dotenv import load_dotenv
+from pytest_mock import MockerFixture  # Используем MockerFixture для лучшей типизации
 
-from main import (display_exchange_rate, filter_and_display_transactions,
-                  generate_card_numbers, display_transactions, main, display_transaction_descriptions)
-from src.generators import card_number_generator
-from src.masks import get_mask_account, get_mask_card_number
-from src.processing import filter_by_state, sort_by_date
-from src.widget import mask_account_card
+# Добавляем путь к src, если запускаем тесты из папки tests
+# Убедись, что путь корректен для твоей структуры
+# sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-load_dotenv()
-EXCHANGE_RATES_API_KEY = os.environ.get("EXCHANGE_RATES_API_KEY")
-EXCHANGE_RATES_BASE_URL = os.environ.get("EXCHANGE_RATES_BASE_URL")
-
-
-def test_filter_by_state(sample_processing_data, state_params):
-    """Тестирование фильтрации по состоянию."""
-    filtered_data = filter_by_state(sample_processing_data, state_params)
-    for item in filtered_data:
-        assert item["state"] == state_params
+# Импортируем ТОЛЬКО то, что есть в НОВОМ main.py
+from main import (
+    main,
+    get_validated_input,
+    get_yes_no_input,
+    display_transactions_final
+    # setup_logger не тестируем напрямую, т.к. это инфраструктура
+)
 
 
-def test_sort_by_date_asc(sample_processing_data):
-    """Тестирование сортировки по дате по возрастанию."""
-    sorted_data = sort_by_date(sample_processing_data, ascending=True)
-    dates = [item["date"] for item in sorted_data]
-    assert dates == sorted(dates)
+# --- Тесты для вспомогательных функций ввода ---
 
-
-def test_sort_by_date_desc(sample_processing_data):
-    """Тестирование сортировки по дате по убыванию."""
-    sorted_data = sort_by_date(sample_processing_data, ascending=False)
-    dates = [item["date"] for item in sorted_data]
-    assert dates == sorted(dates, reverse=True)
-
-
-def test_mask_account_card(account_card_params):
-    """Тестирование маскировки номера карты или счета."""
-    masked = mask_account_card(account_card_params)
-    if "Счет" in account_card_params:
-        assert masked.startswith("Счет **")
-    else:
-        assert masked.startswith("Visa") or masked.startswith("MasterCard") or masked.startswith("Maestro")
-
-
-def test_get_mask_account(mask_account_params):
-    """Тестирование маскировки номера счета."""
-    masked = get_mask_account(mask_account_params)
-    if len(mask_account_params) == 20:
-        assert masked == f"**{mask_account_params[-4:]}"
-    else:
-        assert masked == "Invalid account number: Account number must be exactly 20 digits"
-
-
-def test_get_mask_card_number(mask_card_params):
-    """Тестирование маскировки номера карты."""
-    masked = get_mask_card_number(mask_card_params)
-    if len(mask_card_params) == 16:
-        assert masked == f"{mask_card_params[:4]} {mask_card_params[4:6]}** **** {mask_card_params[-4:]}"
-    elif len(mask_card_params) <= 8:
-        assert masked == mask_card_params
-    else:
-        assert masked == ""
-
-
-def test_card_number_generator(expected_card_numbers_data):
-    """Тестирование генерации номеров карт."""
-    with patch('builtins.input', side_effect=["1000000000000000", "1000000000000010"]):
-        generated_numbers = list(card_number_generator(int(input()), int(input())))
-        assert generated_numbers == expected_card_numbers_data
-
-
-test_transactions = [
-    {
-        "id": 1,
-        "date": "2023-10-27T10:00:00.000000",
-        "state": "EXECUTED",
-        "description": "Test transaction",
-        "from": "Счет 12345678901234567890",
-        "to": "Счет 98765432109876540000",
-        "operationAmount": {"amount": "100.00", "currency": {"code": "RUB"}},
-    }
-]
-
-
-@pytest.mark.parametrize("currency, expected", [
-    ("RUB", 1)
+@pytest.mark.parametrize("inputs, valid_options, expected_output, expected_print_parts", [
+    (["EXECUTED"], {"EXECUTED", "CANCELED"}, "EXECUTED", []),  # Валидный ввод
+    (["executed"], {"EXECUTED", "CANCELED"}, "EXECUTED", []),  # Валидный ввод, другой регистр
+    (["invalid", "CANCELED"], {"EXECUTED", "CANCELED"}, "CANCELED",  # Невалидный, потом валидный
+     # ИЗМЕНЕНО: Передаем части сообщения для проверки
+     {"invalid_input": "invalid", "options": {"EXECUTED", "CANCELED"}}),
+    (["Да"], {"ДА", "НЕТ"}, "ДА", []),  # Для get_yes_no_input
+    (["нет"], {"ДА", "НЕТ"}, "НЕТ", []),  # Для get_yes_no_input
 ])
-def test_filter_and_display_transactions(currency, expected, monkeypatch):
-    monkeypatch.setattr('builtins.input', lambda _: currency)
-    filtered_transactions = filter_and_display_transactions(test_transactions)
-    assert len(filtered_transactions) == expected
+def test_get_validated_input(inputs, valid_options, expected_output, expected_print_parts, mocker, capsys, mock_input):
+    """Тестирует get_validated_input с разными сценариями ввода."""
+    mock_input = mocker.patch('builtins.input', side_effect=inputs)
+    mock_logger_warning = mocker.patch('main.logger.warning')
 
+    result = get_validated_input("Тестовый ввод: ", valid_options)
 
-def test_generate_card_numbers(capsys):
-    """Тестирование generate_card_numbers."""
-    with patch('builtins.input', side_effect=["1000000000000000", "1000000000000000"]):
-        generate_card_numbers()
-        captured = capsys.readouterr()
-    assert "1000000000000000" in captured.out
+    assert result == expected_output
+    assert mock_input.call_count == len(inputs)
 
-
-def test_display_exchange_rate_integration(capsys, monkeypatch):
-    """Интеграционный тест display_exchange_rate."""
-    with patch('builtins.input', side_effect=["USD", "RUB"]):
-        display_exchange_rate()
-        captured = capsys.readouterr()
-    assert "Текущий курс USD к RUB:" in captured.out
-    captured_output = captured.out
-    start_index = captured_output.find("Текущий курс USD к RUB:") + len("Текущий курс USD к RUB:")
-    exchange_rate_str = captured_output[start_index:].strip()
-    try:
-        exchange_rate = float(exchange_rate_str)
-        assert exchange_rate > 0
-    except ValueError:
-        pytest.fail(f"Не удалось преобразовать курс валюты в число: {exchange_rate_str}")
-
-
-def test_display_exchange_rate_integration_failure(capsys):
-    """Интеграционный тест display_exchange_rate при неудачном получении курса."""
-    with patch('src.external_api.get_exchange_rate', return_value=None):
-        with patch('builtins.input', side_effect=["", ""]):
-            display_exchange_rate()
-            captured = capsys.readouterr()
-    expected_output = "Не удалось получить курс обмена.\n"
-    assert expected_output in captured.out
-
-
-# Новые тесты для display_transactions
-def test_display_transactions_empty(capsys):
-    """Тестирование display_transactions с пустым списком транзакций."""
-    display_transactions([])
     captured = capsys.readouterr()
-    assert "No transactions to display." in captured.out
+
+    # ИЗМЕНЕНО: Проверяем наличие частей сообщения, если ожидается ошибка
+    if expected_print_parts:
+        # Ожидаем только одно сообщение об ошибке для этого теста
+        invalid_input = expected_print_parts["invalid_input"]
+        options_to_check = expected_print_parts["options"]
+
+        assert f"Некорректный ввод '{invalid_input}'" in captured.out
+        assert "Доступные опции:" in captured.out
+        # Проверяем наличие всех ожидаемых опций в выводе
+        for option in options_to_check:
+            assert option in captured.out
+        # Проверяем логирование
+        mock_logger_warning.assert_called_once()
+    else:
+        # Если ошибки не ожидалось, вывод должен быть пуст
+        assert captured.out == ""
+        mock_logger_warning.assert_not_called()
 
 
-def test_display_transactions_invalid_date(capsys, mocker):
-    """Тестирование display_transactions с некорректным форматом даты."""
-    transaction = {
-        "id": 1,
-        "state": "EXECUTED",
-        "date": "invalid-date",
-        "operationAmount": {"amount": "100.00", "currency": {"code": "RUB"}},
-        "description": "Test",
-        "from": "Счет 12345678901234567890",
-        "to": "Счет 98765432109876543210"
-    }
-    mocker.patch("main.convert_transaction_amount_to_rub", return_value=100.0)
-
-    with patch("main.logger.error") as mock_logger:
-        display_transactions([transaction])
-        captured = capsys.readouterr()
-
-    assert "Дата: N/A" in captured.out
-    mock_logger.assert_called_with("Invalid date format: invalid-date")
+@pytest.mark.parametrize("inputs, expected_result", [
+    (["Да"], True),
+    (["ДА"], True),
+    (["да"], True),
+    (["Нет"], False),
+    (["НЕТ"], False),
+    (["нет"], False),
+    (["Неверно", "Да"], True),  # Сначала неверный ввод
+])
+def test_get_yes_no_input(inputs, expected_result, mocker):
+    """Тестирует get_yes_no_input."""
+    mocker.patch('builtins.input', side_effect=inputs)
+    # Мокаем get_validated_input внутри get_yes_no_input не будем, тестируем ее как единое целое
+    result = get_yes_no_input("Тестовый вопрос?")
+    assert result == expected_result
 
 
-def test_display_transactions_conversion_failed(capsys, mocker):
-    """Тестирование display_transactions, когда конвертация суммы не удалась."""
-    transaction = {
-        "id": 1,
-        "state": "EXECUTED",
-        "date": "2023-10-27T10:00:00Z",
-        "operationAmount": {"amount": "100.00", "currency": {"code": "USD"}},
-        "description": "Test",
-        "from": "Счет 12345678901234567890",
-        "to": "Счет 98765432109876543210"
-    }
-    mocker.patch("main.convert_transaction_amount_to_rub", return_value=None)
+# --- Тесты для display_transactions_final ---
 
-    with patch("main.logger.warning") as mock_logger:
-        display_transactions([transaction])
-        captured = capsys.readouterr()
-
-    assert "Сумма: N/A N/A" in captured.out
-    mock_logger.assert_called_with(
-        "Не удалось конвертировать сумму для транзакции 1. Отображается исходная сумма."
-    )
+# Используем фикстуру из conftest.py
+def test_display_transactions_final_empty(capsys, mocker):
+    """Тест вывода для пустого списка транзакций."""
+    mock_logger_info = mocker.patch('main.logger.info')
+    display_transactions_final([])
+    captured = capsys.readouterr()
+    assert "Не найдено ни одной транзакции" in captured.out
+    mock_logger_info.assert_called_with("Итоговая выборка транзакций пуста.")
 
 
-def test_display_transactions_exception(capsys, mocker):
-    """Тестирование display_transactions при возникновении исключения."""
-    transaction = {
-        "id": 1,
-        # Отсутствуют обязательные ключи, чтобы вызвать исключение
-    }
-    with patch("main.logger.warning") as mock_logger:
-        display_transactions([transaction])
-        captured = capsys.readouterr()
+def test_display_transactions_final_normal(transactions_with_descriptions, capsys, mocker):
+    """Тест вывода для нормального списка транзакций."""
+    # Берем одну транзакцию для простоты проверки формата
+    test_data = [transactions_with_descriptions[0]]  # Первая транзакция
+    mock_logger_info = mocker.patch('main.logger.info')
 
-    assert "Skipping transaction with missing keys" in captured.out
-    mock_logger.assert_called_with(f"Skipping transaction with missing keys: {transaction}")
+    display_transactions_final(test_data)
+    captured = capsys.readouterr()
 
-
-def test_display_transactions_exception_error(capsys, mocker):
-    """Тестирование display_transactions при возникновении исключения с logger.error."""
-    transaction = {
-        "id": 1,
-        "state": "EXECUTED",
-        "date": "2023-10-27T10:00:00Z",
-        "operationAmount": {"amount": "100.00", "currency": {"code": "RUB"}},
-        "description": "Test",
-        "from": "Счет 12345678901234567890",
-        "to": "Счет 98765432109876543210"
-    }
-    mocker.patch(
-        "main.convert_transaction_amount_to_rub",
-        side_effect=ValueError("Mocked exception for testing")
-    )
-    with patch("main.logger.error") as mock_logger:
-        display_transactions([transaction])
-        captured = capsys.readouterr()
-
-    assert "Error processing transaction" in captured.out
-    mock_logger.assert_called()
+    # Проверяем ключевые элементы формата вывода
+    assert "Всего банковских операций в выборке: 1" in captured.out
+    assert "01.01.2024 Перевод средств OP-1234 другу" in captured.out  # Дата + Описание
+    # Проверка маскирования (нужно импортировать и вызвать маскирование или проверить результат)
+    # Для ID 1: from = None, to = None => transaction_info = "" (не выводится)
+    # assert "->" not in captured.out # Проверяем, что строки from/to нет
+    assert "Сумма: 100.00 RUB" in captured.out  # Сумма + Валюта
+    mock_logger_info.assert_called_with("Вывод 1 итоговых транзакций.")
 
 
-# Тест для display_transaction_descriptions
-def test_display_transaction_descriptions(capsys):
-    """Тестирование display_transaction_descriptions."""
-    transactions = [
-        {"description": "Test transaction", "date": "2023-10-27T10:00:00Z"},
-        {"description": "", "date": "2023-10-27T10:00:00Z"}
+def test_display_transactions_final_masking(transactions_with_descriptions, capsys):
+    """Тест вывода с маскированием счета/карты."""
+    # Используем транзакцию, где есть from/to
+    test_data = [{
+        "id": 10, "state": "EXECUTED", "date": "2024-01-10T10:00:00.000000",
+        "description": "Перевод с карты на счет",
+        "from": "Visa Gold 1234567890123456",  # Карта
+        "to": "Счет 98765432109876543210",  # Счет
+        "operationAmount": {"amount": "1000.00", "currency": {"code": "RUB"}}
+    }]
+    display_transactions_final(test_data)
+    captured = capsys.readouterr()
+    assert "Visa Gold 1234 56** **** 3456 -> Счет **3210" in captured.out
+
+
+def test_display_transactions_final_opening_deposit(transactions_with_descriptions, capsys):
+    """Тест вывода для операции 'Открытие вклада'."""
+    test_data = [{
+        "id": 11, "state": "EXECUTED", "date": "2024-01-11T10:00:00.000000",
+        "description": "Открытие вклада",  # Важно для логики вывода from/to
+        "to": "Счет 11223344556677889900",  # Только 'to'
+        "operationAmount": {"amount": "50000.00", "currency": {"code": "RUB"}}
+    }]
+    display_transactions_final(test_data)
+    captured = capsys.readouterr()
+    assert "11.01.2024 Открытие вклада" in captured.out
+    assert "Счет **9900" in captured.out  # Только 'to' счет
+    assert "->" not in captured.out  # Стрелки быть не должно
+
+
+def test_display_transactions_final_invalid_date(transactions_with_descriptions, capsys, mocker):
+    """Тест вывода при невалидной дате."""
+    test_data = [transactions_with_descriptions[0].copy()]
+    test_data[0]['date'] = "неверная дата"
+    mock_logger_error = mocker.patch('main.logger.error')
+
+    display_transactions_final(test_data)
+    captured = capsys.readouterr()
+
+    assert "Дата (неверная дата) Перевод средств OP-1234 другу" in captured.out
+    mock_logger_error.assert_called_once()  # Проверяем, что ошибка залогирована
+
+
+def test_display_transactions_final_general_exception(transactions_with_descriptions, capsys, mocker):
+    """Тест вывода при общем исключении во время обработки транзакции."""
+    test_data = [transactions_with_descriptions[0]]
+    # Мокаем get_mask_account, чтобы вызвать ошибку
+    mocker.patch('main.get_mask_account', side_effect=TypeError("Тестовая ошибка"))
+    mock_logger_error = mocker.patch('main.logger.error')  # Мокаем logger.error
+
+    display_transactions_final(test_data)
+    captured = capsys.readouterr()
+
+    assert "! Ошибка обработки транзакции ID 1." in captured.out
+    # Проверяем, что logger.error был вызван с exc_info=True (по умолчанию для logger.exception, но мы мокаем error)
+    assert mock_logger_error.call_count == 1
+    args, kwargs = mock_logger_error.call_args
+    assert "Критическая ошибка при обработке транзакции ID 1" in args[0]
+    assert kwargs.get('exc_info') is True
+
+
+# --- Тесты для основной функции main (workflow) ---
+
+def test_main_workflow_happy_path(mocker: MockerFixture, capsys, mock_transactions_data):
+    """Тест основного сценария: JSON, EXECUTED, Sort Desc, RUB only, No Keyword."""
+    # Последовательность ответов пользователя
+    user_inputs = [
+        "1",  # Выбор файла JSON
+        "EXECUTED",  # Статус
+        "Да",  # Сортировать по дате?
+        "Нет",  # Сортировать по убыванию
+        "Да",  # Только рублевые?
+        "Нет"  # Фильтровать по слову?
     ]
-    display_transaction_descriptions(transactions)
-    captured = capsys.readouterr()
-    assert "Test transaction" in captured.out
-    assert "No description" in captured.out
-
-
-# Новые тесты для main
-def test_main_invalid_choice(mocker, capsys):
-    """Тестирование main с неверным выбором в меню."""
-    mocker.patch("main.read_transactions", return_value=[])
-    mocker.patch("builtins.input", side_effect=["invalid_file_path", "invalid", "6"])
-
-    with patch("main.logger.warning") as mock_logger:
-        main()
-        captured = capsys.readouterr()
-
-    assert "Неверный выбор. Пожалуйста, выберите снова." in captured.out
-    mock_logger.assert_any_call("Invalid choice selected: invalid")
-
-
-def test_main_empty_transactions(mocker, capsys):
-    """Тестирование main с пустым списком транзакций."""
-    mocker.patch("main.read_transactions", return_value=[])
-    mocker.patch("builtins.input", side_effect=["file_path", "1", "6"])
+    # Мокаем ввод пользователя
+    mocker.patch('builtins.input', side_effect=user_inputs)
+    # Мокаем чтение файла
+    mocker.patch('main.read_transactions', return_value=mock_transactions_data)
+    # Мокаем функции обработки, чтобы контролировать результат
+    mock_filter_state = mocker.patch('main.filter_by_state', return_value=[mock_transactions_data[0],
+                                                                           mock_transactions_data[
+                                                                               1]])  # Возвращаем EXECUTED
+    mock_sort_date = mocker.patch('main.sort_by_date', return_value=[mock_transactions_data[1], mock_transactions_data[
+        0]])  # Сортируем по убыванию (ID 2, ID 1)
+    mock_filter_currency = mocker.patch('main.filter_by_currency',
+                                        return_value=[mock_transactions_data[0]])  # Возвращаем только RUB (ID 1)
+    # filter_by_description_keyword не должен вызываться
+    mock_filter_keyword = mocker.patch('main.filter_by_description_keyword')
+    # Мокаем финальный вывод, чтобы проверить, что ему передали
+    mock_display_final = mocker.patch('main.display_transactions_final')
 
     main()
+
+    # Проверяем вызовы моков
+    mock_filter_state.assert_called_once_with(mocker.ANY, "EXECUTED")  # ANY т.к. список мог измениться
+    mock_sort_date.assert_called_once_with(mocker.ANY, ascending=False)
+    mock_filter_currency.assert_called_once()  # Проверяем что был вызван (аргументы сложнее проверить из-за генератора)
+    mock_filter_keyword.assert_not_called()
+    # Проверяем, что display_transactions_final вызвана с итоговым списком (одна транзакция ID 1)
+    mock_display_final.assert_called_once_with([mock_transactions_data[0]])
+
+    # Проверяем часть вывода в консоль
     captured = capsys.readouterr()
-    assert "No transactions to display." in captured.out
+    assert "Для обработки выбран JSON-файл." in captured.out
+    assert 'Операции отфильтрованы по статусу "EXECUTED"' in captured.out
+    assert "Сортировка по дате (по убыванию)." in captured.out
+    assert "Отфильтрованы только рублевые транзакции." in captured.out
+    assert "Распечатываю итоговый список транзакций..." in captured.out
 
 
-def test_main_display_transaction_descriptions(mocker, capsys):
-    """Тестирование main с опцией 4 (вывод описаний транзакций)."""
-    transactions = [
-        {"description": "Test transaction", "date": "2023-10-27T10:00:00Z"},
-        {"description": "", "date": "2023-10-27T10:00:00Z"}
-    ]
-    mocker.patch("main.read_transactions", return_value=transactions)
-    mocker.patch("builtins.input", side_effect=["file_path", "4", "6"])
+def test_main_workflow_read_fail(mocker: MockerFixture, capsys):
+    """Тест сценария, когда чтение файла не удалось."""
+    user_inputs = ["1"]  # Выбор файла JSON
+    mocker.patch('builtins.input', side_effect=user_inputs)
+    # Мокаем чтение файла так, чтобы оно вернуло пустой список
+    mocker.patch('main.read_transactions', return_value=[])
+    mock_logger_error = mocker.patch('main.logger.error')
+    mock_logger_info = mocker.patch('main.logger.info')
+    # Мокаем exit, чтобы тест не завершился
+    mock_exit = mocker.patch('builtins.exit')
 
     main()
+
     captured = capsys.readouterr()
-    print(f"Captured output: {captured.out}")
-    assert "Test transaction" in captured.out
-    assert "No description" in captured.out
+    assert "Не удалось загрузить данные" in captured.out
+    mock_logger_error.assert_called_once()
+    # Проверяем, что программа логирует завершение
+    assert any(
+        "Программа завершена из-за ошибки загрузки данных" in call.args[0] for call in mock_logger_info.call_args_list)
+    mock_exit.assert_not_called()  # Мы не мокали exit, поэтому программа должна просто завершить main
+
+
+def test_main_workflow_filter_by_keyword(mocker: MockerFixture, capsys, mock_transactions_data):
+    """Тест сценария с фильтрацией по ключевому слову."""
+    user_inputs = [
+        "1",  # JSON
+        "EXECUTED",  # Status
+        "Нет",  # Sort?
+        "Нет",  # RUB only?
+        "Да",  # Filter by keyword?
+        "Оплата"  # Keyword
+    ]
+    mocker.patch('builtins.input', side_effect=user_inputs)
+    mocker.patch('main.read_transactions', return_value=mock_transactions_data)
+    mocker.patch('main.filter_by_state',
+                 return_value=[mock_transactions_data[0], mock_transactions_data[1]])  # Executed
+    # Мокаем filter_by_description_keyword
+    mocker.patch('main.filter_by_description_keyword',
+                 return_value=[mock_transactions_data[1]])  # Только ID 2 содержит "Оплата"
+    mock_display_final = mocker.patch('main.display_transactions_final')
+
+    main()
+
+    captured = capsys.readouterr()
+    assert "Отфильтрованы транзакции по слову 'Оплата'." in captured.out
+    # Проверяем, что display_transactions_final вызвана с транзакцией ID 2
+    mock_display_final.assert_called_once_with([mock_transactions_data[1]])
+
+
+def test_main_workflow_no_results(mocker: MockerFixture, capsys, mock_transactions_data):
+    """Тест сценария, когда после фильтрации не остается транзакций."""
+    user_inputs = [
+        "1",            # JSON
+        "PENDING",      # Status (нет таких в mock_transactions_data)
+        # Дальнейшие вопросы не должны задаваться
+    ]
+    mocker.patch('builtins.input', side_effect=user_inputs)
+    mocker.patch('main.read_transactions', return_value=mock_transactions_data)
+    # filter_by_state вернет пустой список
+    mocker.patch('main.filter_by_state', return_value=[])
+    mock_display_final = mocker.patch('main.display_transactions_final')
+
+    main()
+
+    captured = capsys.readouterr()  # Захватываем вывод на всякий случай (для отладки)
+
+    # Главная проверка: убеждаемся, что display_transactions_final была вызвана с пустым списком
+    mock_display_final.assert_called_once_with([])
+
+    assert "Отсортировать операции по дате?" not in captured.out
+    assert "Выводить только рублевые транзакции?" not in captured.out

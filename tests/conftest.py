@@ -331,3 +331,17 @@ def transactions_with_descriptions() -> List[Dict[str, Any]]:
             "operationAmount": {"amount": "200.00", "currency": {"code": "RUB"}}
         }
     ]
+
+
+@pytest.fixture
+def mock_transactions_data() -> list:
+    # Используем данные из conftest, если они там, или определяем здесь
+    # Упрощенный вариант для тестов main
+    return [
+        {"id": 1, "state": "EXECUTED", "date": "2024-01-01T10:00:00.000000", "description": "Перевод RUB",
+         "operationAmount": {"amount": "100", "currency": {"code": "RUB"}}},
+        {"id": 2, "state": "EXECUTED", "date": "2024-01-03T12:00:00.000000", "description": "Оплата USD",
+         "operationAmount": {"amount": "50", "currency": {"code": "USD"}}},
+        {"id": 3, "state": "CANCELED", "date": "2024-01-02T11:00:00.000000", "description": "Покупка RUB",
+         "operationAmount": {"amount": "200", "currency": {"code": "RUB"}}},
+    ]

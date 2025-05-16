@@ -9,6 +9,7 @@ from src.processing import (  # Оставляем только использу
     filter_by_state, sort_by_date
 )
 from src.utils import read_transactions
+from src.widget import get_date, mask_account_card
 
 # --- 1. Создание директории для логов ---
 LOG_DIR = "logs"
@@ -81,16 +82,16 @@ def display_transactions_final(transactions_to_display):
     for transaction in transactions_to_display:
         try:
             # Дата
-            date_str = "Дата N/A"
-            try:
-                date_raw = transaction.get("date", "")
-                if date_raw:
-                    date_str = datetime.strptime(date_raw, "%Y-%m-%dT%H:%M:%SZ").strftime("%d.%m.%Y")
-            except (ValueError, TypeError) as date_err:
-                logger.error(
-                    f"Ошибка форматирования даты '{transaction.get('date')}'"
-                    f" для ID {transaction.get('id')}: {date_err}")
-                date_str = f"Дата ({transaction.get('date')})"  # Показываем исходную дату при ошибке
+            date_raw = transaction.get("date", "")
+            # Используем функцию из widget.py
+            date_str = get_date(date_raw) if date_raw else "Дата N/A"
+            # Логирование ошибок можно оставить или доверить get_date (если там есть логирование)
+            # Но get_date возвращает "Invalid date format", что можно проверить
+            if date_str == "Invalid date format":
+                logger.error(f"Ошибка форматирования даты '{date_raw}' для ID {transaction.get('id')}")
+                date_str = f"Дата ({date_raw})"  # Можно оставить исходную дату при ошибке
+            elif not date_raw:
+                date_str = "Дата N/A"  # Если дата пустая изначально
 
             # Описание
             description = transaction.get("description", "Нет описания")
@@ -98,22 +99,25 @@ def display_transactions_final(transactions_to_display):
             # Откуда/Куда (маскирование)
             from_value = transaction.get("from", "")
             to_value = transaction.get("to", "")
-            from_masked = get_mask_account(from_value) if "Счет" in from_value else get_mask_card_number(
-                from_value) if from_value else ""
-            to_masked = get_mask_account(to_value) if "Счет" in to_value else get_mask_card_number(
-                to_value) if to_value else ""
+
+            # Используем функцию из widget.py для маскировки
+            from_masked = mask_account_card(from_value)  # Функция сама разберется с типом
+            to_masked = mask_account_card(to_value)
 
             # Формирование строки "откуда -> куда"
             transaction_info = ""
-            if from_masked and to_masked:
+            # Проверяем, вернула ли функция непустую строку (успешная маскировка)
+            from_exists = bool(from_masked) and "Invalid" not in from_masked and "Unknown" not in from_masked
+            to_exists = bool(to_masked) and "Invalid" not in to_masked and "Unknown" not in to_masked
+
+            if from_exists and to_exists:
                 transaction_info = f"{from_masked} -> {to_masked}"
-            elif to_masked:  # Пополнение или открытие вклада
-                # Если в описании "Открытие вклада", используем только "куда"
+            elif to_exists:
                 if "открытие вклада" not in description.lower():
-                    transaction_info = f"-> {to_masked}"  # Используем пустую строку как источник
+                    transaction_info = f"-> {to_masked}"
                 else:
-                    transaction_info = to_masked  # Только счет для вклада
-            elif from_masked:  # Перевод куда-то без указания
+                    transaction_info = to_masked
+            elif from_exists:
                 transaction_info = f"{from_masked} -> ????"
 
             # Сумма
@@ -138,8 +142,6 @@ def display_transactions_final(transactions_to_display):
             print(f"Сумма: {amount} {currency}".strip())  # Убираем лишний пробел, если валюты нет
 
         except Exception as ex:  # Оставляем Exception, но используем ex в логе
-            # Используем logger.error с exc_info=True для traceback'а
-            # и включаем 'ex' в сообщение, чтобы использовать переменную.
             logger.error(
                 f"Критическая ошибка при обработке транзакции ID {transaction.get('id', 'N/A')}:"
                 f" {ex}. Данные транзакции: {transaction}",
