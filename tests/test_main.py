@@ -2,23 +2,20 @@ import os
 import sys
 from datetime import datetime
 from io import StringIO
-from unittest.mock import patch, call  # Добавляем call для проверки логов
+from unittest.mock import call, patch  # Добавляем call для проверки логов
 
 import pytest
-from pytest_mock import MockerFixture  # Используем MockerFixture для лучшей типизации
+from pytest_mock import \
+    MockerFixture  # Используем MockerFixture для лучшей типизации
+
+# Импортируем ТОЛЬКО то, что есть в НОВОМ main.py
+from main import (  # setup_logger не тестируем напрямую, т.к. это инфраструктура
+    display_transactions_final, get_validated_input, get_yes_no_input, main)
 
 # Добавляем путь к src, если запускаем тесты из папки tests
 # Убедись, что путь корректен для твоей структуры
 # sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-# Импортируем ТОЛЬКО то, что есть в НОВОМ main.py
-from main import (
-    main,
-    get_validated_input,
-    get_yes_no_input,
-    display_transactions_final
-    # setup_logger не тестируем напрямую, т.к. это инфраструктура
-)
 
 
 # --- Тесты для вспомогательных функций ввода ---

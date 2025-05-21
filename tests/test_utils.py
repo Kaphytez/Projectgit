@@ -1,9 +1,11 @@
-import pytest
-import json
 import csv
-import pandas as pd
+import json
 from unittest.mock import patch
-from src.utils import read_transactions, parse_date
+
+import pandas as pd
+import pytest
+
+from src.utils import parse_date, read_transactions
 
 
 # Фикстуры для тестовых данных

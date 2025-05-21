@@ -1,17 +1,11 @@
-from typing import List, Dict, Any  # Добавим импорты типов для читаемости
+from typing import Any, Dict, List  # Добавим импорты типов для читаемости
 
 import pytest
 
 # Импортируем ВСЕ функции из processing
-from src.processing import (
-    filter_by_state,
-    sort_by_date,
-    filter_by_currency,
-    extract_operation_code,
-    categorize_transactions,
-    filter_by_description_keyword
-)
-
+from src.processing import (categorize_transactions, extract_operation_code,
+                            filter_by_currency, filter_by_description_keyword,
+                            filter_by_state, sort_by_date)
 
 # --- Тесты для filter_by_state ---
 

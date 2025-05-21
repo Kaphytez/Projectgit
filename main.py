@@ -1,15 +1,16 @@
 import logging
 import os
 from datetime import datetime
-# Импортируем нужные функции из соответствующих модулей
 
 from src.masks import get_mask_account, get_mask_card_number
 from src.processing import (  # Оставляем только используемые функции обработки
-    filter_by_currency, filter_by_description_keyword,
-    filter_by_state, sort_by_date
-)
+    filter_by_currency, filter_by_description_keyword, filter_by_state,
+    sort_by_date)
 from src.utils import read_transactions
 from src.widget import get_date, mask_account_card
+
+# Импортируем нужные функции из соответствующих модулей
+
 
 # --- 1. Создание директории для логов ---
 LOG_DIR = "logs"

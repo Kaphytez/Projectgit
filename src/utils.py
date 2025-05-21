@@ -3,9 +3,10 @@ import json
 import logging
 import os
 from typing import Dict, List, Optional
-from src.decorators import log
 
 import pandas as pd
+
+from src.decorators import log
 
 # Настраиваем логер для этого модуля
 logger = logging.getLogger(__name__)

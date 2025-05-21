@@ -1,7 +1,7 @@
 import os
 import sys
-from typing import Optional, List, Dict, Any
-from unittest.mock import patch, Mock
+from typing import Any, Dict, List, Optional
+from unittest.mock import Mock, patch
 from urllib.error import HTTPError
 
 import pytest
@@ -242,26 +242,24 @@ def mock_get_exchange_rate(mocker):
 
 
 @pytest.fixture
-def mock_api_ratelimit(mocker: MockerFixture):
-    """Фикстура для эмуляции ошибки Too Many Requests"""
-    mock_response = Mock()
-    mock_response.status_code = 429
-    mock_response.reason = "Too Many Requests"
-    mock_response.url = "https://example.com/convert"
-    mock_response.headers = {"Content-Type": "application/json"}
-    mock_response.json.return_value = {"error": "Too Many Requests"}
+def mock_api_ratelimit(mocker: MockerFixture):  # Переименовать, если есть конфликт имен
+    """Фикстура для эмуляции ошибки Too Many Requests от requests.Session.get."""
+    mock_response_session = mocker.Mock(spec=requests.Response)  # Используем spec для лучшего мокирования
+    mock_response_session.status_code = 429
+    mock_response_session.reason = "Too Many Requests"
+    mock_response_session.url = "https://api.example.com/convert"  # Пример URL
+    mock_response_session.headers = {"Content-Type": "application/json"}
+    mock_response_session.json.return_value = {"error": "Too Many Requests Rate Limit Exceeded"}  # Пример тела JSON
 
-    # Создаем HTTPError без response
-    http_error = HTTPError("429 Too Many Requests")
-
-    # Устанавливаем атрибут response вручную
-    http_error.response = mock_response
+    http_429_error = requests.exceptions.HTTPError(
+        "429 Client Error: Too Many Requests for url",
+        response=mock_response_session
+    )
+    mock_response_session.raise_for_status.side_effect = http_429_error
 
     # Мокируем Session.get
-    mock_session_get = mocker.patch('requests.Session.get', return_value=mock_response)
-    mock_session_get.return_value.raise_for_status.side_effect = http_error
-
-    return mock_session_get
+    mocker.patch('requests.Session.get', return_value=mock_response_session)
+    return mock_response_session
 
 
 @pytest.fixture
@@ -345,3 +343,12 @@ def mock_transactions_data() -> list:
         {"id": 3, "state": "CANCELED", "date": "2024-01-02T11:00:00.000000", "description": "Покупка RUB",
          "operationAmount": {"amount": "200", "currency": {"code": "RUB"}}},
     ]
+
+
+@pytest.fixture
+def mock_api_success(mocker: MockerFixture):
+    """Фикстура для успешного ответа API"""
+    mock_response = Mock()
+    mock_response.json.return_value = {"result": 75.0}
+    mock_response.raise_for_status.return_value = None
+    return mocker.patch('requests.get', return_value=mock_response)

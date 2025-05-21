@@ -1,7 +1,6 @@
 import functools
 import logging
 
-
 # Получаем логер для этого модуля
 logger = logging.getLogger(__name__)
 
